@@ -1,0 +1,65 @@
+type UserRole = 
+ variant {
+   admin;
+   guest;
+   user;
+ };
+type ServiceCategory = 
+ variant {
+   haircare;
+   makeup;
+   nails;
+   other;
+   skincare;
+ };
+type SalonService = 
+ record {
+   category: ServiceCategory;
+   description: text;
+   id: nat;
+   name: text;
+   salonId: nat;
+ };
+type Salon = 
+ record {
+   description: text;
+   id: nat;
+   location: text;
+   name: text;
+ };
+type MemberStatus = 
+ variant {
+   approved;
+   pending_inspection;
+   pending_payment;
+   rejected;
+ };
+type MemberProfile = 
+ record {
+   address: text;
+   name: text;
+   paymentConfirmed: bool;
+   phone: text;
+   "principal": principal;
+   registeredAt: nat64;
+   status: MemberStatus;
+ };
+service : {
+  _initializeAccessControlWithSecret: (userSecret: text) -> ();
+  adminAddSalon: (name: text, location: text, description: text) -> (opt nat);
+  adminAddService: (salonId: nat, name: text, description: text, category:
+   ServiceCategory) -> (opt nat);
+  adminApproveMember: (member: principal) -> (bool);
+  adminGetAllMembers: () -> (vec MemberProfile) query;
+  adminRejectMember: (member: principal) -> (bool);
+  adminRemoveSalon: (id: nat) -> (bool);
+  adminRemoveService: (id: nat) -> (bool);
+  assignCallerUserRole: (user: principal, role: UserRole) -> ();
+  confirmPayment: () -> (bool);
+  getAllSalons: () -> (vec Salon) query;
+  getApprovedServices: () -> (vec SalonService) query;
+  getCallerUserRole: () -> (UserRole) query;
+  getMyProfile: () -> (opt MemberProfile) query;
+  isCallerAdmin: () -> (bool) query;
+  registerMember: (name: text, phone: text, address: text) -> (bool);
+}
