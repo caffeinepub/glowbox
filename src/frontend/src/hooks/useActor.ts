@@ -6,42 +6,33 @@ import { getSecretParameter } from "../utils/urlParams";
 import { useAuth } from "./useAuth";
 
 const ACTOR_QUERY_KEY = "actor";
+
 export function useActor() {
-  const { identity } = useAuth();
+  const { identity, isInitializing } = useAuth();
   const queryClient = useQueryClient();
+
   const actorQuery = useQuery<backendInterface>({
-    queryKey: [ACTOR_QUERY_KEY, identity?.getPrincipal().toString()],
+    queryKey: [ACTOR_QUERY_KEY, identity?.getPrincipal().toString() ?? "anon"],
     queryFn: async () => {
       if (!identity) {
         return await createActorWithConfig();
       }
-
-      const actorOptions = {
-        agentOptions: {
-          identity,
-        },
-      };
-
-      const actor = await createActorWithConfig(actorOptions);
+      const actor = await createActorWithConfig({
+        agentOptions: { identity },
+      });
       const adminToken = getSecretParameter("caffeineAdminToken") || "";
       await actor._initializeAccessControlWithSecret(adminToken);
       return actor;
     },
     staleTime: Number.POSITIVE_INFINITY,
-    enabled: true,
+    // Never run before auth state is restored from localStorage
+    enabled: !isInitializing,
   });
 
   useEffect(() => {
     if (actorQuery.data) {
       queryClient.invalidateQueries({
-        predicate: (query) => {
-          return !query.queryKey.includes(ACTOR_QUERY_KEY);
-        },
-      });
-      queryClient.refetchQueries({
-        predicate: (query) => {
-          return !query.queryKey.includes(ACTOR_QUERY_KEY);
-        },
+        predicate: (query) => !query.queryKey.includes(ACTOR_QUERY_KEY),
       });
     }
   }, [actorQuery.data, queryClient]);

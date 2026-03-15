@@ -82,8 +82,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUserEmail(normalized);
   };
 
+  // Sign out only clears the in-memory session.
+  // The stored account (email + key) stays in localStorage so the user can sign back in.
   const signOut = () => {
-    localStorage.removeItem(STORAGE_KEY);
     setIdentity(undefined);
     setUserEmail(undefined);
   };

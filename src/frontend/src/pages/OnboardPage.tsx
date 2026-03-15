@@ -9,7 +9,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Textarea } from "@/components/ui/textarea";
 import { useNavigate } from "@tanstack/react-router";
 import { CheckCircle2, Copy, Loader2, Sparkles } from "lucide-react";
 import { motion } from "motion/react";
@@ -17,6 +16,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import Footer from "../components/Footer";
 import Header from "../components/Header";
+import { useActor } from "../hooks/useActor";
 import { useAuth } from "../hooks/useAuth";
 import {
   useConfirmPayment,
@@ -50,6 +50,7 @@ function QRCode({ value, size = 200 }: { value: string; size?: number }) {
 
 export default function OnboardPage() {
   const { identity } = useAuth();
+  const { actor, isFetching: isActorLoading } = useActor();
   const navigate = useNavigate();
   const { data: profile, isLoading } = useGetMyProfile();
   const registerMember = useRegisterMember();
@@ -57,7 +58,11 @@ export default function OnboardPage() {
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
+  const [addressLine, setAddressLine] = useState("");
+  const [zip, setZip] = useState("");
+
   const [step, setStep] = useState<"form" | "payment">("form");
   const [registeredName, setRegisteredName] = useState("");
   const [registeredPhone, setRegisteredPhone] = useState("");
@@ -81,7 +86,7 @@ export default function OnboardPage() {
     return null;
   }
 
-  if (isLoading) {
+  if (isLoading || isActorLoading) {
     return (
       <div
         className="min-h-screen flex items-center justify-center"
@@ -92,27 +97,55 @@ export default function OnboardPage() {
     );
   }
 
-  if (profile) {
+  // If already registered with payment confirmed, go to dashboard
+  if (profile?.paymentConfirmed) {
     navigate({ to: "/dashboard" });
+    return null;
+  }
+
+  // If registered but payment pending, jump to payment step
+  if (profile && step === "form") {
+    setStep("payment");
+    setRegisteredName(profile.name);
+    setRegisteredPhone(profile.phone);
     return null;
   }
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !phone.trim() || !address.trim()) {
+    if (
+      !name.trim() ||
+      !phone.trim() ||
+      !addressLine.trim() ||
+      !city.trim() ||
+      !state.trim() ||
+      !zip.trim()
+    ) {
       toast.error("Please fill in all fields.");
       return;
     }
+    if (!actor) {
+      toast.error("Still loading, please wait a moment and try again.");
+      return;
+    }
+    const fullAddress = `${addressLine}, ${city}, ${state} - ${zip}`;
     try {
-      console.log("[Focliy] Calling registerMember...");
-      const ok = await registerMember.mutateAsync({ name, phone, address });
+      console.log(
+        "[Focliy] Calling registerMember, actor principal:",
+        identity.getPrincipal().toString(),
+      );
+      const ok = await registerMember.mutateAsync({
+        name,
+        phone,
+        address: fullAddress,
+      });
       console.log("[Focliy] registerMember result:", ok);
       if (ok) {
         setRegisteredName(name);
         setRegisteredPhone(phone);
         setStep("payment");
       } else {
-        toast.error("Registration failed. Please try again.");
+        toast.error("Registration failed. You may already be registered.");
       }
     } catch (err) {
       console.error("[Focliy] registerMember error:", err);
@@ -121,17 +154,17 @@ export default function OnboardPage() {
   };
 
   const handleConfirmPayment = async () => {
+    if (!actor) {
+      toast.error("Still loading, please wait a moment and try again.");
+      return;
+    }
     try {
-      console.log("[Focliy] Calling confirmPayment...");
       const ok = await confirmPayment.mutateAsync();
-      console.log("[Focliy] confirmPayment result:", ok);
       if (ok) {
-        toast.success(
-          "Payment confirmed! We'll review and send your box shortly.",
-        );
+        toast.success("Payment confirmed! Your membership is under review.");
         navigate({ to: "/dashboard" });
       } else {
-        toast.error("Could not confirm payment. Please contact support.");
+        toast.error("Could not confirm payment. Please try again.");
       }
     } catch (err) {
       console.error("[Focliy] confirmPayment error:", err);
@@ -139,102 +172,129 @@ export default function OnboardPage() {
     }
   };
 
-  const copyUPI = () => {
-    navigator.clipboard.writeText(UPI_ID);
-    toast.success("UPI ID copied!");
-  };
-
-  const copyRef = () => {
-    navigator.clipboard.writeText(refId);
-    toast.success("Reference ID copied!");
-  };
-
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
-      <main className="flex-1 py-12">
+      <main className="flex-1 py-10">
         <div className="container max-w-lg">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-center mb-8"
-          >
-            <div className="inline-flex w-14 h-14 rounded-full bg-primary/10 items-center justify-center mb-4">
-              <Sparkles className="w-7 h-7 text-primary" />
-            </div>
-            <h1 className="font-display text-3xl font-bold">
-              Welcome to Focliy
-            </h1>
-            <p className="text-muted-foreground mt-2">
-              Complete your membership registration below.
-            </p>
-          </motion.div>
-
           {step === "form" ? (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
             >
-              <Card className="shadow-rose">
+              <div className="mb-8 text-center">
+                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                  <Sparkles className="w-6 h-6 text-primary" />
+                </div>
+                <h1 className="font-display text-3xl font-bold">
+                  Complete Your Profile
+                </h1>
+                <p className="text-muted-foreground mt-2">
+                  Fill in your details to proceed with membership.
+                </p>
+              </div>
+
+              <Card>
                 <CardHeader>
-                  <CardTitle className="font-display text-xl">
-                    Your Details
+                  <CardTitle className="font-display text-lg">
+                    Personal Details
                   </CardTitle>
                   <CardDescription>
-                    We need a few details to process your membership and ship
-                    your Focliy box.
+                    This information will be used for your membership and hair
+                    sample delivery.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <form onSubmit={handleRegister} className="space-y-5">
-                    <div className="space-y-2">
-                      <Label htmlFor="name">Full Name</Label>
-                      <Input
-                        id="name"
-                        placeholder="Priya Sharma"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        data-ocid="onboard.name.input"
-                        autoComplete="name"
-                      />
+                  <form onSubmit={handleRegister} className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="name">Full Name *</Label>
+                        <Input
+                          id="name"
+                          placeholder="Priya Sharma"
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                          required
+                          data-ocid="onboard.name.input"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="phone">Phone Number *</Label>
+                        <Input
+                          id="phone"
+                          placeholder="+91 98765 43210"
+                          value={phone}
+                          onChange={(e) => setPhone(e.target.value)}
+                          required
+                          data-ocid="onboard.phone.input"
+                        />
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="phone">Phone Number</Label>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="address">Address Line *</Label>
                       <Input
-                        id="phone"
-                        placeholder="+91 98765 43210"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        data-ocid="onboard.phone.input"
-                        autoComplete="tel"
-                        type="tel"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="address">Delivery Address</Label>
-                      <Textarea
                         id="address"
-                        placeholder="Flat 4B, Rose Gardens, MG Road, Bangalore - 560001"
-                        value={address}
-                        onChange={(e) => setAddress(e.target.value)}
-                        data-ocid="onboard.address.textarea"
-                        rows={3}
-                        autoComplete="street-address"
+                        placeholder="House No., Street, Area"
+                        value={addressLine}
+                        onChange={(e) => setAddressLine(e.target.value)}
+                        required
+                        data-ocid="onboard.address.input"
                       />
                     </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="city">City *</Label>
+                        <Input
+                          id="city"
+                          placeholder="Mumbai"
+                          value={city}
+                          onChange={(e) => setCity(e.target.value)}
+                          required
+                          data-ocid="onboard.city.input"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="state">State *</Label>
+                        <Input
+                          id="state"
+                          placeholder="Maharashtra"
+                          value={state}
+                          onChange={(e) => setState(e.target.value)}
+                          required
+                          data-ocid="onboard.state.input"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="zip">ZIP / Postal Code *</Label>
+                      <Input
+                        id="zip"
+                        placeholder="400001"
+                        value={zip}
+                        onChange={(e) => setZip(e.target.value)}
+                        required
+                        data-ocid="onboard.zip.input"
+                      />
+                    </div>
+
+                    <Separator className="my-2" />
+
                     <Button
                       type="submit"
-                      className="w-full py-5 font-semibold shadow-rose"
-                      disabled={registerMember.isPending}
-                      data-ocid="onboard.submit_button"
+                      className="w-full"
+                      disabled={registerMember.isPending || !actor}
+                      data-ocid="onboard.register.submit_button"
                     >
                       {registerMember.isPending ? (
                         <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />{" "}
-                          Registering...
+                          <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                          Saving...
                         </>
                       ) : (
-                        "Continue to Payment"
+                        "Continue to Payment →"
                       )}
                     </Button>
                   </form>
@@ -246,106 +306,72 @@ export default function OnboardPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
             >
-              <Card className="shadow-rose">
-                <CardHeader>
-                  <CardTitle className="font-display text-xl">
-                    Complete Your Payment
-                  </CardTitle>
-                  <CardDescription>
-                    Scan the QR code below with any UPI app to pay ₹535 and
-                    activate your Focliy membership.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="flex flex-col items-center gap-4 bg-secondary/50 rounded-xl p-6">
-                    <div className="bg-white p-3 rounded-xl shadow-sm">
-                      <QRCode value={upiLink} size={200} />
+              <div className="mb-8 text-center">
+                <h1 className="font-display text-3xl font-bold">Pay ₹535</h1>
+                <p className="text-muted-foreground mt-2">
+                  Scan the QR code below to complete your membership payment.
+                </p>
+              </div>
+
+              <Card>
+                <CardContent className="pt-6 pb-6">
+                  <div className="flex flex-col items-center gap-6">
+                    <div className="p-3 bg-white rounded-xl border shadow-sm">
+                      <QRCode value={upiLink} size={220} />
                     </div>
-                    <div className="text-center space-y-1">
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
-                        Scan with GPay, PhonePe, Paytm or BHIM
-                      </p>
-                      <div className="flex items-center justify-center gap-2 mt-2">
-                        <span className="font-display text-lg font-bold text-foreground">
-                          {UPI_ID}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={copyUPI}
-                          data-ocid="onboard.copy.button"
-                          className="w-7 h-7"
-                        >
-                          <Copy className="w-3.5 h-3.5" />
-                        </Button>
+
+                    <div className="w-full space-y-3">
+                      <div className="flex items-center justify-between text-sm bg-muted/40 rounded-lg px-4 py-3">
+                        <span className="text-muted-foreground">UPI ID</span>
+                        <span className="font-medium">{UPI_ID}</span>
                       </div>
-                      <p className="text-xl font-bold text-primary">₹535</p>
+                      <div className="flex items-center justify-between text-sm bg-muted/40 rounded-lg px-4 py-3">
+                        <span className="text-muted-foreground">Amount</span>
+                        <span className="font-medium">₹{AMOUNT}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm bg-muted/40 rounded-lg px-4 py-3 gap-2">
+                        <span className="text-muted-foreground flex-shrink-0">
+                          Reference ID
+                        </span>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-mono text-xs truncate">
+                            {refId}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(refId);
+                              toast.success("Reference ID copied!");
+                            }}
+                            className="flex-shrink-0 text-muted-foreground hover:text-foreground"
+                            data-ocid="payment.refid.button"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4 space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-primary">
-                      Your Payment Reference ID
+                    <p className="text-xs text-muted-foreground text-center">
+                      After paying, click the button below. We'll send your hair
+                      sample kit within 2-3 business days.
                     </p>
-                    <div className="flex items-center gap-2">
-                      <code className="flex-1 text-sm font-mono bg-background border border-border rounded-lg px-3 py-2 text-foreground break-all">
-                        {refId}
-                      </code>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={copyRef}
-                        data-ocid="onboard.copy_ref.button"
-                        className="flex-shrink-0"
-                      >
-                        <Copy className="w-4 h-4" />
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      This ID is automatically included in the QR code. You can
-                      also add it manually in the payment remarks so we can
-                      verify your payment faster.
-                    </p>
+
+                    <Button
+                      className="w-full gap-2"
+                      onClick={handleConfirmPayment}
+                      disabled={confirmPayment.isPending || !actor}
+                      data-ocid="payment.confirm.primary_button"
+                    >
+                      {confirmPayment.isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4" /> I Have Paid
+                        </>
+                      )}
+                    </Button>
                   </div>
-
-                  <div className="space-y-3 text-sm">
-                    <div className="flex items-start gap-3">
-                      <CheckCircle2 className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
-                      <span>
-                        Scan the QR code or open your UPI app and search for{" "}
-                        <strong>{UPI_ID}</strong>
-                      </span>
-                    </div>
-                    <div className="flex items-start gap-3">
-                      <CheckCircle2 className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
-                      <span>
-                        Send exactly <strong>₹535</strong> — the reference ID is
-                        auto-filled in the remarks
-                      </span>
-                    </div>
-                    <div className="flex items-start gap-3">
-                      <CheckCircle2 className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
-                      <span>Click the button below once payment is done</span>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  <Button
-                    className="w-full py-5 font-semibold shadow-rose"
-                    onClick={handleConfirmPayment}
-                    disabled={confirmPayment.isPending}
-                    data-ocid="onboard.confirm_payment.button"
-                  >
-                    {confirmPayment.isPending ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />{" "}
-                        Confirming...
-                      </>
-                    ) : (
-                      "I've Paid ✓"
-                    )}
-                  </Button>
                 </CardContent>
               </Card>
             </motion.div>

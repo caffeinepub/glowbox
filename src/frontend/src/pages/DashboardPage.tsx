@@ -149,7 +149,7 @@ function ServiceCard({
 }
 
 export default function DashboardPage() {
-  const { identity } = useAuth();
+  const { identity, userEmail } = useAuth();
   const navigate = useNavigate();
   const { data, isLoading: profileLoading } = useGetMyProfile();
   const profile = data as MemberProfile | null | undefined;
@@ -185,9 +185,52 @@ export default function DashboardPage() {
     );
   }
 
+  // No profile yet -- show onboarding prompt instead of redirecting
   if (!profile) {
-    navigate({ to: "/onboard" });
-    return null;
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <main className="flex-1 py-16">
+          <div
+            className="container max-w-lg text-center"
+            data-ocid="dashboard.onboard.card"
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-6">
+                <Sparkles className="w-8 h-8 text-primary" />
+              </div>
+              <h1 className="font-display text-3xl font-bold mb-3">
+                Welcome to Focliy!
+              </h1>
+              <p className="text-muted-foreground mb-2">
+                Signed in as{" "}
+                <span className="font-medium text-foreground">{userEmail}</span>
+              </p>
+              <p className="text-muted-foreground mb-8">
+                Complete your membership onboarding to access free cosmetic
+                services at partner salons.
+              </p>
+              <Link to="/onboard">
+                <Button
+                  size="lg"
+                  className="gap-2"
+                  data-ocid="dashboard.onboard.primary_button"
+                >
+                  Start Onboarding <ArrowRight className="w-5 h-5" />
+                </Button>
+              </Link>
+              <p className="text-xs text-muted-foreground mt-6">
+                Annual membership fee: ₹535 · Hair sample inspection required
+              </p>
+            </motion.div>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
   }
 
   const statusInfo = getStatusInfo(profile.status);
