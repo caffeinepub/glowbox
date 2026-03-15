@@ -1,7 +1,10 @@
 import { Ed25519KeyIdentity } from "@dfinity/identity";
 import { createContext, useContext, useEffect, useState } from "react";
 
-const STORAGE_KEY = "focliy_auth";
+// Only store email for UX convenience (pre-fill on next visit).
+// The actual identity (and thus ICP principal) is derived deterministically
+// from email+password on every sign-in -- no credential storage needed.
+const EMAIL_KEY = "focliy_last_email";
 
 type AuthState = {
   identity: Ed25519KeyIdentity | undefined;
@@ -24,8 +27,7 @@ async function deriveIdentity(
     "SHA-256",
     new TextEncoder().encode(raw),
   );
-  const seed = new Uint8Array(buf);
-  return Ed25519KeyIdentity.generate(seed);
+  return Ed25519KeyIdentity.generate(new Uint8Array(buf));
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -36,57 +38,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isInitializing, setIsInitializing] = useState(true);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        const restored = Ed25519KeyIdentity.fromJSON(JSON.parse(parsed.key));
-        setIdentity(restored);
-        setUserEmail(parsed.email);
-      }
-    } catch {
-      localStorage.removeItem(STORAGE_KEY);
-    } finally {
-      setIsInitializing(false);
-    }
+    // Nothing to restore -- identity is always re-derived from email+password.
+    // This just marks initialization as complete.
+    setIsInitializing(false);
   }, []);
 
+  // signIn: derive identity from email+password.
+  // The backend will tell us if an account exists (via getMyProfile).
+  // We do NOT validate against localStorage -- accounts live in the ICP canister.
   const signIn = async (email: string, password: string) => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) {
-      throw new Error("Account not found");
-    }
-    const parsed = JSON.parse(stored);
-    if (parsed.email !== email.toLowerCase().trim()) {
-      throw new Error("Invalid credentials");
-    }
+    const normalizedEmail = email.toLowerCase().trim();
+    console.log("[Focliy] signIn: deriving identity for", normalizedEmail);
     const id = await deriveIdentity(email, password);
-    const storedPrincipal = Ed25519KeyIdentity.fromJSON(JSON.parse(parsed.key))
-      .getPrincipal()
-      .toString();
-    if (id.getPrincipal().toString() !== storedPrincipal) {
-      throw new Error("Invalid credentials");
-    }
     setIdentity(id);
-    setUserEmail(parsed.email);
-  };
-
-  const signUp = async (email: string, password: string) => {
-    const id = await deriveIdentity(email, password);
-    const normalized = email.toLowerCase().trim();
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ email: normalized, key: JSON.stringify(id.toJSON()) }),
+    setUserEmail(normalizedEmail);
+    localStorage.setItem(EMAIL_KEY, normalizedEmail);
+    console.log(
+      "[Focliy] signIn: identity set, principal:",
+      id.getPrincipal().toString(),
     );
-    setIdentity(id);
-    setUserEmail(normalized);
   };
 
-  // Sign out only clears the in-memory session.
-  // The stored account (email + key) stays in localStorage so the user can sign back in.
+  // signUp: derive identity and set it. The caller must then call registerMember
+  // on the backend with this identity to persist the account in the canister.
+  const signUp = async (email: string, password: string) => {
+    const normalizedEmail = email.toLowerCase().trim();
+    console.log("[Focliy] signUp: creating identity for", normalizedEmail);
+    const id = await deriveIdentity(email, password);
+    setIdentity(id);
+    setUserEmail(normalizedEmail);
+    localStorage.setItem(EMAIL_KEY, normalizedEmail);
+    console.log(
+      "[Focliy] signUp: identity set, principal:",
+      id.getPrincipal().toString(),
+    );
+  };
+
   const signOut = () => {
     setIdentity(undefined);
     setUserEmail(undefined);
+    console.log("[Focliy] Signed out");
   };
 
   return (

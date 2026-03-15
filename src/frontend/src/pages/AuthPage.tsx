@@ -46,7 +46,8 @@ export default function AuthPage() {
     try {
       await signIn(email, password);
       navigate({ to: "/dashboard" });
-    } catch {
+    } catch (err) {
+      console.error("[Focliy] handleSignIn error:", err);
       toast.error("Invalid credentials or account not found");
     } finally {
       setLoading(false);
@@ -68,7 +69,8 @@ export default function AuthPage() {
     try {
       await signUp(email, password);
       navigate({ to: "/dashboard" });
-    } catch {
+    } catch (err) {
+      console.error("[Focliy] handleSignIn error:", err);
       toast.error("Could not create account. Please try again.");
     } finally {
       setLoading(false);

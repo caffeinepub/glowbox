@@ -6,32 +6,41 @@ import { getSecretParameter } from "../utils/urlParams";
 import { useAuth } from "./useAuth";
 
 const ACTOR_QUERY_KEY = "actor";
-
 export function useActor() {
   const { identity, isInitializing } = useAuth();
   const queryClient = useQueryClient();
-
   const actorQuery = useQuery<backendInterface>({
-    queryKey: [ACTOR_QUERY_KEY, identity?.getPrincipal().toString() ?? "anon"],
+    queryKey: [ACTOR_QUERY_KEY, identity?.getPrincipal().toString()],
     queryFn: async () => {
       if (!identity) {
+        console.log("[Focliy] useActor: no identity, creating anonymous actor");
         return await createActorWithConfig();
       }
-      const actor = await createActorWithConfig({
-        agentOptions: { identity },
-      });
+      console.log(
+        "[Focliy] useActor: creating authenticated actor for",
+        identity.getPrincipal().toString(),
+      );
+      const actorOptions = {
+        agentOptions: {
+          identity,
+        },
+      };
+      const actor = await createActorWithConfig(actorOptions);
       const adminToken = getSecretParameter("caffeineAdminToken") || "";
       await actor._initializeAccessControlWithSecret(adminToken);
       return actor;
     },
     staleTime: Number.POSITIVE_INFINITY,
-    // Never run before auth state is restored from localStorage
+    // Wait until auth is fully initialized before creating actor
     enabled: !isInitializing,
   });
 
   useEffect(() => {
     if (actorQuery.data) {
       queryClient.invalidateQueries({
+        predicate: (query) => !query.queryKey.includes(ACTOR_QUERY_KEY),
+      });
+      queryClient.refetchQueries({
         predicate: (query) => !query.queryKey.includes(ACTOR_QUERY_KEY),
       });
     }
