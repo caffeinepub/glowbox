@@ -104,7 +104,9 @@ export default function OnboardPage() {
       return;
     }
     try {
+      console.log("[Focliy] Calling registerMember...");
       const ok = await registerMember.mutateAsync({ name, phone, address });
+      console.log("[Focliy] registerMember result:", ok);
       if (ok) {
         setRegisteredName(name);
         setRegisteredPhone(phone);
@@ -112,14 +114,17 @@ export default function OnboardPage() {
       } else {
         toast.error("Registration failed. Please try again.");
       }
-    } catch {
+    } catch (err) {
+      console.error("[Focliy] registerMember error:", err);
       toast.error("Something went wrong. Please try again.");
     }
   };
 
   const handleConfirmPayment = async () => {
     try {
+      console.log("[Focliy] Calling confirmPayment...");
       const ok = await confirmPayment.mutateAsync();
+      console.log("[Focliy] confirmPayment result:", ok);
       if (ok) {
         toast.success(
           "Payment confirmed! We'll review and send your box shortly.",
@@ -128,7 +133,8 @@ export default function OnboardPage() {
       } else {
         toast.error("Could not confirm payment. Please contact support.");
       }
-    } catch {
+    } catch (err) {
+      console.error("[Focliy] confirmPayment error:", err);
       toast.error("Something went wrong. Please try again.");
     }
   };
