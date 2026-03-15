@@ -13,7 +13,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { useNavigate } from "@tanstack/react-router";
 import { CheckCircle2, Copy, Loader2, Sparkles } from "lucide-react";
 import { motion } from "motion/react";
-import { QRCodeSVG } from "qrcode.react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import Footer from "../components/Footer";
@@ -34,6 +33,19 @@ function generateRefId(name: string, phone: string): string {
   const namePart = name.replace(/\s+/g, "").slice(0, 5).toUpperCase();
   const phonePart = phone.replace(/\D/g, "").slice(-4);
   return `FOCLIY-${namePart}${phonePart}-${ts}`;
+}
+
+function QRCode({ value, size = 200 }: { value: string; size?: number }) {
+  const url = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(value)}&margin=8`;
+  return (
+    <img
+      src={url}
+      alt="UPI QR Code"
+      width={size}
+      height={size}
+      className="rounded-lg"
+    />
+  );
 }
 
 export default function OnboardPage() {
@@ -241,12 +253,7 @@ export default function OnboardPage() {
                 <CardContent className="space-y-6">
                   <div className="flex flex-col items-center gap-4 bg-secondary/50 rounded-xl p-6">
                     <div className="bg-white p-3 rounded-xl shadow-sm">
-                      <QRCodeSVG
-                        value={upiLink}
-                        size={200}
-                        level="M"
-                        includeMargin={false}
-                      />
+                      <QRCode value={upiLink} size={200} />
                     </div>
                     <div className="text-center space-y-1">
                       <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">

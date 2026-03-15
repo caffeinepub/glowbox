@@ -10,12 +10,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2, Sparkles, Star } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
+import Footer from "../components/Footer";
+import Header from "../components/Header";
 import { useAuth } from "../hooks/useAuth";
 import { useGetMyProfile } from "../hooks/useQueries";
+
+const decorativeFeatures = [
+  { icon: "✨", text: "Access premium beauty services", delay: 0.3 },
+  { icon: "💅", text: "Facials, mani-pedi, waxing & more", delay: 0.45 },
+  { icon: "🌸", text: "Partner salons across India", delay: 0.6 },
+  { icon: "🎁", text: "Unlimited services after approval", delay: 0.75 },
+];
 
 export default function AuthPage() {
   const { signIn, signUp, isAuthenticated } = useAuth();
@@ -73,175 +82,258 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4">
-      <div className="w-full max-w-md">
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
+    <div className="flex flex-col min-h-screen bg-background">
+      <Header />
+
+      <main className="flex-1 relative overflow-hidden">
+        {/* Decorative background blobs */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 overflow-hidden"
         >
-          {/* Logo */}
-          <div className="text-center mb-8">
-            <Link to="/" className="inline-flex flex-col items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center">
-                <Sparkles className="w-6 h-6 text-primary-foreground" />
-              </div>
-              <span className="font-display text-2xl font-semibold text-foreground">
-                Focliy
-              </span>
-            </Link>
-            <p className="text-muted-foreground text-sm mt-2">
-              India's Premier Hair & Beauty Membership
-            </p>
-          </div>
+          <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full opacity-20 blur-3xl bg-blob-rose" />
+          <div className="absolute top-1/3 -right-32 w-80 h-80 rounded-full opacity-15 blur-3xl bg-blob-gold" />
+          <div className="absolute -bottom-16 left-1/3 w-72 h-72 rounded-full opacity-10 blur-3xl bg-blob-blush" />
+        </div>
 
-          <Card className="shadow-rose">
-            <CardHeader className="pb-2">
-              <CardTitle className="font-display text-xl text-center">
-                Welcome
-              </CardTitle>
-              <CardDescription className="text-center">
-                Sign in to your account or create a new one
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Tabs defaultValue="signin" data-ocid="auth.tab">
-                <TabsList className="w-full mb-6">
-                  <TabsTrigger
-                    value="signin"
-                    className="flex-1"
-                    data-ocid="auth.signin.tab"
-                  >
-                    Sign In
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="signup"
-                    className="flex-1"
-                    data-ocid="auth.signup.tab"
-                  >
-                    Create Account
-                  </TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="signin">
-                  <form onSubmit={handleSignIn} className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="signin-email">Email</Label>
-                      <Input
-                        id="signin-email"
-                        type="email"
-                        placeholder="priya@example.com"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                        autoComplete="email"
-                        data-ocid="auth.signin.email.input"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="signin-password">Password</Label>
-                      <Input
-                        id="signin-password"
-                        type="password"
-                        placeholder="••••••••"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required
-                        autoComplete="current-password"
-                        data-ocid="auth.signin.password.input"
-                      />
-                    </div>
-                    <Button
-                      type="submit"
-                      className="w-full py-5 font-semibold shadow-rose"
-                      disabled={loading}
-                      data-ocid="auth.signin.submit_button"
-                    >
-                      {loading ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Signing In...
-                        </>
-                      ) : (
-                        "Sign In"
-                      )}
-                    </Button>
-                  </form>
-                </TabsContent>
-
-                <TabsContent value="signup">
-                  <form onSubmit={handleSignUp} className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="signup-email">Email</Label>
-                      <Input
-                        id="signup-email"
-                        type="email"
-                        placeholder="priya@example.com"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                        autoComplete="email"
-                        data-ocid="auth.signup.email.input"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="signup-password">Password</Label>
-                      <Input
-                        id="signup-password"
-                        type="password"
-                        placeholder="Minimum 8 characters"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required
-                        autoComplete="new-password"
-                        data-ocid="auth.signup.password.input"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="signup-confirm">Confirm Password</Label>
-                      <Input
-                        id="signup-confirm"
-                        type="password"
-                        placeholder="Repeat your password"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        required
-                        autoComplete="new-password"
-                        data-ocid="auth.signup.confirm.input"
-                      />
-                    </div>
-                    <Button
-                      type="submit"
-                      className="w-full py-5 font-semibold shadow-rose"
-                      disabled={loading}
-                      data-ocid="auth.signup.submit_button"
-                    >
-                      {loading ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Creating Account...
-                        </>
-                      ) : (
-                        "Create Account"
-                      )}
-                    </Button>
-                  </form>
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
-
-          <p className="text-center text-sm text-muted-foreground mt-6">
-            <Link
-              to="/"
-              className="hover:text-foreground transition-colors underline underline-offset-4"
-              data-ocid="auth.home.link"
+        <div className="relative z-10 container py-12 md:py-16 lg:py-20">
+          <div className="flex flex-col lg:flex-row items-center justify-center gap-12 lg:gap-16 max-w-5xl mx-auto">
+            {/* Left decorative panel — visible only on lg+ */}
+            <motion.div
+              initial={{ opacity: 0, x: -32 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6, ease: "easeOut" }}
+              className="hidden lg:flex flex-col justify-center flex-1 max-w-sm"
             >
-              Back to Home
-            </Link>
-          </p>
-        </motion.div>
-      </div>
+              <Link to="/" className="inline-flex items-center gap-3 mb-8">
+                <div className="w-11 h-11 rounded-full bg-primary flex items-center justify-center shadow-lg">
+                  <Sparkles className="w-5 h-5 text-primary-foreground" />
+                </div>
+                <span className="font-display text-3xl font-bold text-foreground">
+                  Focliy
+                </span>
+              </Link>
+
+              <h2 className="font-display text-4xl font-semibold text-foreground leading-tight mb-4">
+                Your beauty
+                <span className="block text-gradient-rose">
+                  membership awaits
+                </span>
+              </h2>
+              <p className="text-muted-foreground text-base leading-relaxed mb-8">
+                India's premier hair & beauty membership. Join thousands of
+                women enjoying unlimited salon services at partner locations.
+              </p>
+
+              <ul className="space-y-4">
+                {decorativeFeatures.map((f) => (
+                  <motion.li
+                    key={f.text}
+                    initial={{ opacity: 0, x: -16 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: f.delay, duration: 0.4 }}
+                    className="flex items-center gap-3"
+                  >
+                    <span className="text-xl">{f.icon}</span>
+                    <span className="text-sm text-foreground/80">{f.text}</span>
+                  </motion.li>
+                ))}
+              </ul>
+
+              <div className="mt-10 flex items-center gap-2 text-xs text-muted-foreground">
+                <div className="flex -space-x-2">
+                  {["P", "S", "A"].map((initial) => (
+                    <div
+                      key={initial}
+                      className="w-7 h-7 rounded-full bg-primary/20 border-2 border-background flex items-center justify-center text-[10px] font-semibold text-primary"
+                    >
+                      {initial}
+                    </div>
+                  ))}
+                </div>
+                <span>Join 500+ members already glowing</span>
+                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+              </div>
+            </motion.div>
+
+            {/* Auth card */}
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+              className="w-full max-w-md lg:max-w-sm xl:max-w-md flex-shrink-0"
+            >
+              {/* Logo — visible only on mobile/tablet */}
+              <div className="text-center mb-8 lg:hidden">
+                <Link
+                  to="/"
+                  className="inline-flex flex-col items-center gap-3"
+                >
+                  <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center shadow-md">
+                    <Sparkles className="w-6 h-6 text-primary-foreground" />
+                  </div>
+                  <span className="font-display text-2xl font-semibold text-foreground">
+                    Focliy
+                  </span>
+                </Link>
+                <p className="text-muted-foreground text-sm mt-2">
+                  India's Premier Hair & Beauty Membership
+                </p>
+              </div>
+
+              <Card className="shadow-rose border-border/60 bg-card/90 backdrop-blur-sm">
+                <CardHeader className="pb-2">
+                  <CardTitle className="font-display text-xl text-center">
+                    Welcome
+                  </CardTitle>
+                  <CardDescription className="text-center">
+                    Sign in to your account or create a new one
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Tabs defaultValue="signin" data-ocid="auth.tab">
+                    <TabsList className="w-full mb-6">
+                      <TabsTrigger
+                        value="signin"
+                        className="flex-1"
+                        data-ocid="auth.signin.tab"
+                      >
+                        Sign In
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value="signup"
+                        className="flex-1"
+                        data-ocid="auth.signup.tab"
+                      >
+                        Create Account
+                      </TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="signin">
+                      <form onSubmit={handleSignIn} className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="signin-email">Email</Label>
+                          <Input
+                            id="signin-email"
+                            type="email"
+                            placeholder="priya@example.com"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            required
+                            autoComplete="email"
+                            data-ocid="auth.signin.email.input"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="signin-password">Password</Label>
+                          <Input
+                            id="signin-password"
+                            type="password"
+                            placeholder="••••••••"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            required
+                            autoComplete="current-password"
+                            data-ocid="auth.signin.password.input"
+                          />
+                        </div>
+                        <Button
+                          type="submit"
+                          className="w-full py-5 font-semibold shadow-rose"
+                          disabled={loading}
+                          data-ocid="auth.signin.submit_button"
+                        >
+                          {loading ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Signing In...
+                            </>
+                          ) : (
+                            "Sign In"
+                          )}
+                        </Button>
+                      </form>
+                    </TabsContent>
+
+                    <TabsContent value="signup">
+                      <form onSubmit={handleSignUp} className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="signup-email">Email</Label>
+                          <Input
+                            id="signup-email"
+                            type="email"
+                            placeholder="priya@example.com"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            required
+                            autoComplete="email"
+                            data-ocid="auth.signup.email.input"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="signup-password">Password</Label>
+                          <Input
+                            id="signup-password"
+                            type="password"
+                            placeholder="Minimum 8 characters"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            required
+                            autoComplete="new-password"
+                            data-ocid="auth.signup.password.input"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="signup-confirm">
+                            Confirm Password
+                          </Label>
+                          <Input
+                            id="signup-confirm"
+                            type="password"
+                            placeholder="Repeat your password"
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            required
+                            autoComplete="new-password"
+                            data-ocid="auth.signup.confirm.input"
+                          />
+                        </div>
+                        <Button
+                          type="submit"
+                          className="w-full py-5 font-semibold shadow-rose"
+                          disabled={loading}
+                          data-ocid="auth.signup.submit_button"
+                        >
+                          {loading ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Creating Account...
+                            </>
+                          ) : (
+                            "Create Account"
+                          )}
+                        </Button>
+                      </form>
+                    </TabsContent>
+                  </Tabs>
+                </CardContent>
+              </Card>
+
+              <p className="text-center text-sm text-muted-foreground mt-6">
+                <Link
+                  to="/"
+                  className="hover:text-foreground transition-colors underline underline-offset-4"
+                  data-ocid="auth.home.link"
+                >
+                  Back to Home
+                </Link>
+              </p>
+            </motion.div>
+          </div>
+        </div>
+      </main>
+
+      <Footer />
     </div>
   );
 }

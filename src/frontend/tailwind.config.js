@@ -70,6 +70,10 @@ export default {
           border: "oklch(var(--sidebar-border))",
           ring: "oklch(var(--sidebar-ring))",
         },
+        // Decorative blob colors for auth page
+        "blob-rose": "oklch(0.65 0.15 15)",
+        "blob-gold": "oklch(0.82 0.12 70)",
+        "blob-blush": "oklch(0.75 0.1 340)",
       },
       borderRadius: {
         lg: "var(--radius)",
