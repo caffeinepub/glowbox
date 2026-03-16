@@ -44,10 +44,32 @@ function getStatusInfo(status: MemberStatus) {
       actionPath: "/onboard" as const,
     };
   }
-  if ("pending_inspection" in status) {
+  if ("payment_submitted" in status) {
+    return {
+      label: "Payment Verification Pending",
+      color: "bg-yellow-50 text-yellow-700 border-yellow-200",
+      icon: Clock,
+      message:
+        "Thank you! We've received your payment request. Our team will verify it within 1-2 business days.",
+      action: null,
+      actionPath: null,
+    };
+  }
+  if ("waiting_hair_samples" in status) {
+    return {
+      label: "Active - Awaiting Hair Samples",
+      color: "bg-blue-50 text-blue-700 border-blue-200",
+      icon: Package,
+      message:
+        "Your payment has been confirmed! Please send us your hair sample kit. We will email you instructions on how to submit your hair sample.",
+      action: null,
+      actionPath: null,
+    };
+  }
+  if ("hair_samples_received" in status) {
     return {
       label: "Under Inspection",
-      color: "bg-blue-50 text-blue-700 border-blue-200",
+      color: "bg-purple-50 text-purple-700 border-purple-200",
       icon: Package,
       message:
         "We've received your box! Our experts are inspecting your hair sample. This takes 2-3 business days.",
@@ -61,7 +83,7 @@ function getStatusInfo(status: MemberStatus) {
       color: "bg-green-50 text-green-700 border-green-200",
       icon: CheckCircle2,
       message:
-        "Congratulations! You're approved. Explore your complimentary services below.",
+        "Your membership is active and you can avail the services now. Explore your complimentary services below!",
       action: null,
       actionPath: null,
     };
@@ -185,7 +207,7 @@ export default function DashboardPage() {
     );
   }
 
-  // No profile yet -- show onboarding prompt instead of redirecting
+  // No profile yet -- show onboarding prompt
   if (!profile) {
     return (
       <div className="min-h-screen flex flex-col">
@@ -329,7 +351,9 @@ export default function DashboardPage() {
               { label: "Phone", value: profile.phone },
               {
                 label: "Payment",
-                value: profile.paymentConfirmed ? "Confirmed ✓" : "Pending",
+                value: profile.paymentConfirmed
+                  ? "Confirmed ✓"
+                  : "Awaiting Verification",
               },
             ].map((item) => (
               <Card key={item.label}>

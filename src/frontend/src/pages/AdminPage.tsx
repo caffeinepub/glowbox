@@ -34,6 +34,7 @@ import { useNavigate } from "@tanstack/react-router";
 import {
   CheckCircle2,
   Loader2,
+  Package,
   Plus,
   ShieldAlert,
   Trash2,
@@ -50,7 +51,9 @@ import {
   useAdminAddSalon,
   useAdminAddService,
   useAdminApproveMember,
+  useAdminConfirmPayment,
   useAdminGetAllMembers,
+  useAdminMarkHairSamplesReceived,
   useAdminRejectMember,
   useAdminRemoveSalon,
   useAdminRemoveService,
@@ -61,12 +64,13 @@ import {
 
 function statusLabel(s: MemberStatus) {
   if ("pending_payment" in s)
-    return {
-      text: "Pending Payment",
-      cls: "bg-accent/20 text-accent-foreground",
-    };
-  if ("pending_inspection" in s)
-    return { text: "Under Inspection", cls: "bg-blue-100 text-blue-700" };
+    return { text: "Pending Payment", cls: "bg-gray-100 text-gray-700" };
+  if ("payment_submitted" in s)
+    return { text: "Payment Submitted", cls: "bg-yellow-100 text-yellow-700" };
+  if ("waiting_hair_samples" in s)
+    return { text: "Awaiting Hair Samples", cls: "bg-blue-100 text-blue-700" };
+  if ("hair_samples_received" in s)
+    return { text: "Samples Received", cls: "bg-purple-100 text-purple-700" };
   if ("approved" in s)
     return { text: "Approved", cls: "bg-green-100 text-green-700" };
   return { text: "Rejected", cls: "bg-red-100 text-red-700" };
@@ -92,7 +96,7 @@ function categoryToMotoko(val: string): ServiceCategory {
 }
 
 export default function AdminPage() {
-  const { identity } = useAuth();
+  const { identity, isInitializing } = useAuth();
   const navigate = useNavigate();
   const { data: isAdmin, isLoading: adminLoading } = useIsAdmin();
   const { data: members = [], isLoading: membersLoading } =
@@ -100,6 +104,8 @@ export default function AdminPage() {
   const { data: salons = [] } = useGetAllSalons();
   const { data: services = [] } = useGetApprovedServices();
 
+  const confirmPaymentAdmin = useAdminConfirmPayment();
+  const markSamplesReceived = useAdminMarkHairSamplesReceived();
   const approveMember = useAdminApproveMember();
   const rejectMember = useAdminRejectMember();
   const addSalon = useAdminAddSalon();
@@ -118,6 +124,9 @@ export default function AdminPage() {
   const [serviceDesc, setServiceDesc] = useState("");
   const [serviceCategory, setServiceCategory] = useState("");
 
+  if (isInitializing) {
+    return null;
+  }
   if (!identity) {
     navigate({ to: "/auth" });
     return null;
@@ -165,6 +174,26 @@ export default function AdminPage() {
       </div>
     );
   }
+
+  const handleConfirmPayment = async (principal: Principal) => {
+    try {
+      await confirmPaymentAdmin.mutateAsync(principal);
+      toast.success(
+        "Payment confirmed! Customer notified to send hair samples.",
+      );
+    } catch {
+      toast.error("Failed to confirm payment.");
+    }
+  };
+
+  const handleMarkSamplesReceived = async (principal: Principal) => {
+    try {
+      await markSamplesReceived.mutateAsync(principal);
+      toast.success("Marked as hair samples received.");
+    } catch {
+      toast.error("Failed to update status.");
+    }
+  };
 
   const handleApprove = async (principal: Principal) => {
     try {
@@ -314,8 +343,16 @@ export default function AdminPage() {
                         <TableBody>
                           {members.map((member, idx) => {
                             const sl = statusLabel(member.status);
-                            const canAct =
-                              "pending_inspection" in member.status;
+                            const canConfirmPayment =
+                              "payment_submitted" in member.status;
+                            const canMarkSamples =
+                              "waiting_hair_samples" in member.status;
+                            const canApproveReject =
+                              "hair_samples_received" in member.status;
+                            const hasActions =
+                              canConfirmPayment ||
+                              canMarkSamples ||
+                              canApproveReject;
                             return (
                               <TableRow
                                 key={member.principal.toString()}
@@ -344,39 +381,81 @@ export default function AdminPage() {
                                     className="text-xs"
                                   >
                                     {member.paymentConfirmed
-                                      ? "Paid"
+                                      ? "Confirmed"
                                       : "Pending"}
                                   </Badge>
                                 </TableCell>
                                 <TableCell>
-                                  {canAct && (
-                                    <div className="flex gap-2">
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="gap-1 text-green-700 border-green-200 hover:bg-green-50"
-                                        onClick={() =>
-                                          handleApprove(member.principal)
-                                        }
-                                        disabled={approveMember.isPending}
-                                        data-ocid={`admin.members.confirm_button.${idx + 1}`}
-                                      >
-                                        <CheckCircle2 className="w-3.5 h-3.5" />{" "}
-                                        Approve
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="gap-1 text-red-700 border-red-200 hover:bg-red-50"
-                                        onClick={() =>
-                                          handleReject(member.principal)
-                                        }
-                                        disabled={rejectMember.isPending}
-                                        data-ocid={`admin.members.delete_button.${idx + 1}`}
-                                      >
-                                        <XCircle className="w-3.5 h-3.5" />{" "}
-                                        Reject
-                                      </Button>
+                                  {hasActions && (
+                                    <div className="flex flex-wrap gap-2">
+                                      {canConfirmPayment && (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="gap-1 text-blue-700 border-blue-200 hover:bg-blue-50"
+                                          onClick={() =>
+                                            handleConfirmPayment(
+                                              member.principal,
+                                            )
+                                          }
+                                          disabled={
+                                            confirmPaymentAdmin.isPending
+                                          }
+                                          data-ocid={`admin.members.confirm_button.${idx + 1}`}
+                                        >
+                                          <CheckCircle2 className="w-3.5 h-3.5" />{" "}
+                                          Confirm Payment
+                                        </Button>
+                                      )}
+                                      {canMarkSamples && (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="gap-1 text-purple-700 border-purple-200 hover:bg-purple-50"
+                                          onClick={() =>
+                                            handleMarkSamplesReceived(
+                                              member.principal,
+                                            )
+                                          }
+                                          disabled={
+                                            markSamplesReceived.isPending
+                                          }
+                                          data-ocid={`admin.members.secondary_button.${idx + 1}`}
+                                        >
+                                          <Package className="w-3.5 h-3.5" />{" "}
+                                          Samples Received
+                                        </Button>
+                                      )}
+                                      {canApproveReject && (
+                                        <>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="gap-1 text-green-700 border-green-200 hover:bg-green-50"
+                                            onClick={() =>
+                                              handleApprove(member.principal)
+                                            }
+                                            disabled={approveMember.isPending}
+                                            data-ocid={`admin.members.edit_button.${idx + 1}`}
+                                          >
+                                            <CheckCircle2 className="w-3.5 h-3.5" />{" "}
+                                            Approve
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="gap-1 text-red-700 border-red-200 hover:bg-red-50"
+                                            onClick={() =>
+                                              handleReject(member.principal)
+                                            }
+                                            disabled={rejectMember.isPending}
+                                            data-ocid={`admin.members.delete_button.${idx + 1}`}
+                                          >
+                                            <XCircle className="w-3.5 h-3.5" />{" "}
+                                            Reject
+                                          </Button>
+                                        </>
+                                      )}
                                     </div>
                                   )}
                                 </TableCell>

@@ -11,8 +11,10 @@ export type Option<T> = Some<T> | None;
 export type UserRole = { admin: null } | { user: null } | { guest: null };
 export type MemberStatus =
     | { approved: null }
-    | { pending_inspection: null }
     | { pending_payment: null }
+    | { payment_submitted: null }
+    | { waiting_hair_samples: null }
+    | { hair_samples_received: null }
     | { rejected: null };
 export type ServiceCategory =
     | { haircare: null }
@@ -51,12 +53,18 @@ export interface backendInterface {
     getCallerUserRole(): Promise<UserRole>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     isCallerAdmin(): Promise<boolean>;
+    createAccount(email: string): Promise<boolean>;
+    refreshAccountRole(email: string): Promise<boolean>;
+    emailExists(email: string): Promise<boolean>;
+    getPrincipalForEmail(email: string): Promise<[] | [Principal]>;
     registerMember(name: string, phone: string, address: string): Promise<boolean>;
     confirmPayment(): Promise<boolean>;
     getMyProfile(): Promise<[] | [MemberProfile]>;
     getApprovedServices(): Promise<SalonService[]>;
     getAllSalons(): Promise<Salon[]>;
     adminGetAllMembers(): Promise<MemberProfile[]>;
+    adminConfirmPayment(member: Principal): Promise<boolean>;
+    adminMarkHairSamplesReceived(member: Principal): Promise<boolean>;
     adminApproveMember(member: Principal): Promise<boolean>;
     adminRejectMember(member: Principal): Promise<boolean>;
     adminAddSalon(name: string, location: string, description: string): Promise<[] | [bigint]>;

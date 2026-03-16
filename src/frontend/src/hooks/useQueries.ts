@@ -112,6 +112,34 @@ export function useConfirmPayment() {
   });
 }
 
+export function useAdminConfirmPayment() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (principal: Principal) => {
+      if (!actor) throw new Error("Actor not available");
+      return getApi(actor).adminConfirmPayment(principal);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["adminMembers"] });
+    },
+  });
+}
+
+export function useAdminMarkHairSamplesReceived() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (principal: Principal) => {
+      if (!actor) throw new Error("Actor not available");
+      return getApi(actor).adminMarkHairSamplesReceived(principal);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["adminMembers"] });
+    },
+  });
+}
+
 export function useAdminApproveMember() {
   const { actor } = useActor();
   const queryClient = useQueryClient();

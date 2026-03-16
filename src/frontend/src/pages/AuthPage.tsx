@@ -6,17 +6,25 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { Loader2, Sparkles, Star } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
 import Footer from "../components/Footer";
 import Header from "../components/Header";
-import { useAuth } from "../hooks/useAuth";
+import { createActorWithConfig } from "../config";
+import { deriveIdentity, useAuth } from "../hooks/useAuth";
 
 const decorativeFeatures = [
   { icon: "✨", text: "Access premium beauty services", delay: 0.3 },
@@ -33,6 +41,8 @@ export default function AuthPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState("signin");
+  const [forgotOpen, setForgotOpen] = useState(false);
 
   if (isAuthenticated) {
     navigate({ to: "/dashboard" });
@@ -44,11 +54,57 @@ export default function AuthPage() {
     if (!email.trim() || !password) return;
     setLoading(true);
     try {
+      const normalizedEmail = email.toLowerCase().trim();
+      console.log("[Focliy] signIn: checking email", normalizedEmail);
+
+      // Step 1: Check if email is registered (anonymous call)
+      const anonActor = await createActorWithConfig();
+      const exists = await anonActor.emailExists(normalizedEmail);
+
+      if (!exists) {
+        console.log("[Focliy] signIn: email not found");
+        toast.error(
+          "You are not registered yet. Please create an account first.",
+        );
+        setActiveTab("signup");
+        return;
+      }
+
+      // Step 2: Derive identity and verify password by calling createAccount (idempotent)
+      const derivedId = await deriveIdentity(email, password);
+      const authActor = await createActorWithConfig({
+        agentOptions: { identity: derivedId },
+      });
+
+      console.log(
+        "[Focliy] signIn: verifying password, principal:",
+        derivedId.getPrincipal().toString(),
+      );
+      const passwordCorrect = await authActor.createAccount(normalizedEmail);
+
+      if (!passwordCorrect) {
+        console.log("[Focliy] signIn: wrong password for", normalizedEmail);
+        toast.error("Incorrect password. Please try again.");
+        return;
+      }
+
+      // Step 3: Refresh role (ensures admin role is applied after canister upgrades)
+      try {
+        await authActor.refreshAccountRole(normalizedEmail);
+        console.log("[Focliy] signIn: role refreshed for", normalizedEmail);
+      } catch (roleErr) {
+        console.warn(
+          "[Focliy] signIn: role refresh failed (non-fatal)",
+          roleErr,
+        );
+      }
+
+      console.log("[Focliy] signIn: SUCCESS for", normalizedEmail);
       await signIn(email, password);
       navigate({ to: "/dashboard" });
     } catch (err) {
       console.error("[Focliy] handleSignIn error:", err);
-      toast.error("Invalid credentials or account not found");
+      toast.error("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -67,10 +123,38 @@ export default function AuthPage() {
     }
     setLoading(true);
     try {
+      const normalizedEmail = email.toLowerCase().trim();
+
+      const anonActor = await createActorWithConfig();
+      const exists = await anonActor.emailExists(normalizedEmail);
+      if (exists) {
+        toast.error(
+          "An account with this email already exists. Please sign in.",
+        );
+        setActiveTab("signin");
+        return;
+      }
+
+      const derivedId = await deriveIdentity(email, password);
+      const authActor = await createActorWithConfig({
+        agentOptions: { identity: derivedId },
+      });
+      const registered = await authActor.createAccount(normalizedEmail);
+      if (!registered) {
+        toast.error("Could not create account. Please try again.");
+        return;
+      }
+
       await signUp(email, password);
+      console.log(
+        "[Focliy] signUp SUCCESS. email:",
+        normalizedEmail,
+        "principal:",
+        derivedId.getPrincipal().toString(),
+      );
       navigate({ to: "/dashboard" });
     } catch (err) {
-      console.error("[Focliy] handleSignIn error:", err);
+      console.error("[Focliy] handleSignUp error:", err);
       toast.error("Could not create account. Please try again.");
     } finally {
       setLoading(false);
@@ -137,7 +221,11 @@ export default function AuthPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
             >
-              <Tabs defaultValue="signin" className="w-full">
+              <Tabs
+                value={activeTab}
+                onValueChange={setActiveTab}
+                className="w-full"
+              >
                 <TabsList className="w-full mb-6" data-ocid="auth.tab">
                   <TabsTrigger value="signin" className="flex-1">
                     Sign In
@@ -172,7 +260,17 @@ export default function AuthPage() {
                           />
                         </div>
                         <div className="space-y-1.5">
-                          <Label htmlFor="signin-password">Password</Label>
+                          <div className="flex items-center justify-between">
+                            <Label htmlFor="signin-password">Password</Label>
+                            <button
+                              type="button"
+                              onClick={() => setForgotOpen(true)}
+                              className="text-xs text-primary hover:underline"
+                              data-ocid="auth.forgot_password.button"
+                            >
+                              Forgot password?
+                            </button>
+                          </div>
                           <Input
                             id="signin-password"
                             type="password"
@@ -195,6 +293,16 @@ export default function AuthPage() {
                             "Sign In"
                           )}
                         </Button>
+                        <p className="text-center text-sm text-muted-foreground">
+                          Don't have an account?{" "}
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab("signup")}
+                            className="text-primary hover:underline font-medium"
+                          >
+                            Create one
+                          </button>
+                        </p>
                       </form>
                     </CardContent>
                   </Card>
@@ -262,24 +370,64 @@ export default function AuthPage() {
                             "Create Account"
                           )}
                         </Button>
+                        <p className="text-center text-sm text-muted-foreground">
+                          Already have an account?{" "}
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab("signin")}
+                            className="text-primary hover:underline font-medium"
+                          >
+                            Sign in
+                          </button>
+                        </p>
                       </form>
                     </CardContent>
                   </Card>
                 </TabsContent>
               </Tabs>
-
-              <p className="text-center text-sm text-muted-foreground mt-6">
-                By signing up you agree to our{" "}
-                <Link to="/" className="underline">
-                  terms
-                </Link>
-                .
-              </p>
             </motion.div>
           </div>
         </div>
       </main>
       <Footer />
+
+      {/* Forgot Password Dialog */}
+      <Dialog open={forgotOpen} onOpenChange={setForgotOpen}>
+        <DialogContent data-ocid="auth.forgot_password.dialog">
+          <DialogHeader>
+            <DialogTitle>Recover Your Password</DialogTitle>
+            <DialogDescription>
+              Since your password is used to generate your account key, it
+              cannot be reset automatically.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-sm text-muted-foreground">
+            <p>
+              To recover access to your account, please contact our support team
+              with your registered email address. We will verify your identity
+              and help you regain access.
+            </p>
+            <div className="p-3 bg-muted rounded-lg">
+              <p className="font-medium text-foreground">Contact Support</p>
+              <p>
+                Email: <span className="text-primary">support@focliy.com</span>
+              </p>
+            </div>
+            <p className="text-xs">
+              Note: If you cannot remember your password and do not wish to
+              contact support, you may create a new account with the same email.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => setForgotOpen(false)}
+            className="w-full"
+            data-ocid="auth.forgot_password.close_button"
+          >
+            Close
+          </Button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

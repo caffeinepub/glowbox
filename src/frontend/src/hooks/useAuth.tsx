@@ -1,9 +1,6 @@
 import { Ed25519KeyIdentity } from "@dfinity/identity";
 import { createContext, useContext, useEffect, useState } from "react";
 
-// Only store email for UX convenience (pre-fill on next visit).
-// The actual identity (and thus ICP principal) is derived deterministically
-// from email+password on every sign-in -- no credential storage needed.
 const EMAIL_KEY = "focliy_last_email";
 
 type AuthState = {
@@ -18,7 +15,8 @@ type AuthState = {
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
-async function deriveIdentity(
+// Exported so AuthPage can use it to create a temporary actor for sign-in validation
+export async function deriveIdentity(
   email: string,
   password: string,
 ): Promise<Ed25519KeyIdentity> {
@@ -38,14 +36,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isInitializing, setIsInitializing] = useState(true);
 
   useEffect(() => {
-    // Nothing to restore -- identity is always re-derived from email+password.
-    // This just marks initialization as complete.
     setIsInitializing(false);
   }, []);
 
-  // signIn: derive identity from email+password.
-  // The backend will tell us if an account exists (via getMyProfile).
-  // We do NOT validate against localStorage -- accounts live in the ICP canister.
   const signIn = async (email: string, password: string) => {
     const normalizedEmail = email.toLowerCase().trim();
     console.log("[Focliy] signIn: deriving identity for", normalizedEmail);
@@ -59,8 +52,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
-  // signUp: derive identity and set it. The caller must then call registerMember
-  // on the backend with this identity to persist the account in the canister.
   const signUp = async (email: string, password: string) => {
     const normalizedEmail = email.toLowerCase().trim();
     console.log("[Focliy] signUp: creating identity for", normalizedEmail);

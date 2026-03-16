@@ -12,6 +12,9 @@ actor {
   let accessControlState = AccessControl.initState();
   let approvalState = Approval.initState(accessControlState);
 
+  // Pre-authorized admin emails
+  let adminEmails : [Text] = ["katiyarritik26@gmail.com"];
+
   public shared ({ caller }) func _initializeAccessControlWithSecret(userSecret : Text) : async () {
     switch (Prim.envVar<system>("CAFFEINE_ADMIN_TOKEN")) {
       case (null) { Runtime.trap("CAFFEINE_ADMIN_TOKEN not set") };
@@ -33,8 +36,27 @@ actor {
     AccessControl.isAdmin(accessControlState, caller);
   };
 
-  // --- Types ---
-  public type MemberStatus = { #pending_payment; #pending_inspection; #approved; #rejected };
+  // --- Legacy types ---
+  type LegacyMemberStatus = { #pending_payment; #pending_inspection; #approved; #rejected };
+  type LegacyMemberProfile = {
+    principal : Principal;
+    name : Text;
+    phone : Text;
+    address : Text;
+    status : LegacyMemberStatus;
+    paymentConfirmed : Bool;
+    registeredAt : Nat64;
+  };
+
+  // --- Current Types ---
+  public type MemberStatus = {
+    #pending_payment;
+    #payment_submitted;
+    #waiting_hair_samples;
+    #hair_samples_received;
+    #approved;
+    #rejected
+  };
 
   public type MemberProfile = {
     principal : Principal;
@@ -46,15 +68,8 @@ actor {
     registeredAt : Nat64;
   };
 
-  public type Salon = {
-    id : Nat;
-    name : Text;
-    location : Text;
-    description : Text;
-  };
-
+  public type Salon = { id : Nat; name : Text; location : Text; description : Text };
   public type ServiceCategory = { #haircare; #skincare; #makeup; #nails; #other };
-
   public type SalonService = {
     id : Nat;
     salonId : Nat;
@@ -64,11 +79,35 @@ actor {
   };
 
   // --- State ---
-  var members = Map.empty<Principal, MemberProfile>();
+  var members = Map.empty<Principal, LegacyMemberProfile>();
+  var membersV2 = Map.empty<Principal, MemberProfile>();
   var salons = Map.empty<Nat, Salon>();
   var services = Map.empty<Nat, SalonService>();
   var nextSalonId : Nat = 1;
   var nextServiceId : Nat = 1;
+  var emailRegistry = Map.empty<Text, Principal>();
+
+  // --- Migration ---
+  system func postupgrade() {
+    for ((k, v) in members.entries()) {
+      let newStatus : MemberStatus = switch (v.status) {
+        case (#pending_payment) { #pending_payment };
+        case (#pending_inspection) { #hair_samples_received };
+        case (#approved) { #approved };
+        case (#rejected) { #rejected };
+      };
+      membersV2.add(k, {
+        principal = v.principal;
+        name = v.name;
+        phone = v.phone;
+        address = v.address;
+        status = newStatus;
+        paymentConfirmed = v.paymentConfirmed;
+        registeredAt = v.registeredAt;
+      });
+    };
+    members := Map.empty<Principal, LegacyMemberProfile>();
+  };
 
   // --- Seed Data ---
   func seedData() {
@@ -76,7 +115,6 @@ actor {
     salons.add(2, { id = 2; name = "Beauty Bliss"; location = "Delhi, NCR"; description = "Specializing in makeup artistry and nail care services." });
     salons.add(3, { id = 3; name = "Radiance Spa"; location = "Bangalore, Karnataka"; description = "Holistic skin and body treatments using natural products." });
     nextSalonId := 4;
-
     services.add(1, { id = 1; salonId = 1; name = "Deep Conditioning Treatment"; description = "Intense moisture repair for dry and damaged hair."; category = #haircare });
     services.add(2, { id = 2; salonId = 1; name = "Keratin Smoothing"; description = "Frizz-free smooth hair treatment lasting up to 3 months."; category = #haircare });
     services.add(3, { id = 3; salonId = 1; name = "Facial Brightening"; description = "Vitamin C infused facial for glowing skin."; category = #skincare });
@@ -89,21 +127,68 @@ actor {
 
   seedData();
 
+  // --- Helper ---
+  func isAdminEmail(email : Text) : Bool {
+    for (e in adminEmails.vals()) { if (e == email) { return true } };
+    false;
+  };
+
+  // --- Email Registry ---
+  public shared ({ caller }) func createAccount(email : Text) : async Bool {
+    switch (emailRegistry.get(email)) {
+      case (?existing) { existing == caller };
+      case null {
+        emailRegistry.add(email, caller);
+        if (isAdminEmail(email)) {
+          accessControlState.userRoles.add(caller, #admin);
+          accessControlState.adminAssigned := true;
+        } else {
+          accessControlState.userRoles.add(caller, #user);
+        };
+        true;
+      };
+    };
+  };
+
+  // Re-apply role on sign-in (in case of canister upgrade)
+  public shared ({ caller }) func refreshAccountRole(email : Text) : async Bool {
+    switch (emailRegistry.get(email)) {
+      case (?existing) {
+        if (existing == caller) {
+          if (isAdminEmail(email)) {
+            accessControlState.userRoles.add(caller, #admin);
+            accessControlState.adminAssigned := true;
+          } else {
+            switch (accessControlState.userRoles.get(caller)) {
+              case (null) { accessControlState.userRoles.add(caller, #user) };
+              case (?_) {};
+            };
+          };
+          true;
+        } else { false };
+      };
+      case null { false };
+    };
+  };
+
+  public query func emailExists(email : Text) : async Bool {
+    emailRegistry.get(email) != null;
+  };
+
+  public query func getPrincipalForEmail(email : Text) : async ?Principal {
+    emailRegistry.get(email);
+  };
+
   // --- Member Functions ---
   public shared ({ caller }) func registerMember(name : Text, phone : Text, address : Text) : async Bool {
-    switch (members.get(caller)) {
+    switch (membersV2.get(caller)) {
       case (?_) { false };
       case null {
         let profile : MemberProfile = {
-          principal = caller;
-          name;
-          phone;
-          address;
-          status = #pending_payment;
-          paymentConfirmed = false;
-          registeredAt = Prim.time();
+          principal = caller; name; phone; address;
+          status = #pending_payment; paymentConfirmed = false; registeredAt = Prim.time();
         };
-        members.add(caller, profile);
+        membersV2.add(caller, profile);
         Approval.requestApproval(approvalState, caller);
         true;
       };
@@ -111,25 +196,19 @@ actor {
   };
 
   public shared ({ caller }) func confirmPayment() : async Bool {
-    switch (members.get(caller)) {
+    switch (membersV2.get(caller)) {
       case null { false };
-      case (?p) {
-        let updated : MemberProfile = { p with status = #pending_inspection; paymentConfirmed = true };
-        members.add(caller, updated);
-        true;
-      };
+      case (?p) { membersV2.add(caller, { p with status = #payment_submitted }); true };
     };
   };
 
   public query ({ caller }) func getMyProfile() : async ?MemberProfile {
-    members.get(caller);
+    membersV2.get(caller);
   };
 
   public query ({ caller }) func getApprovedServices() : async [SalonService] {
-    switch (members.get(caller)) {
-      case (?p) {
-        if (p.status == #approved) { services.values().toArray() } else { [] };
-      };
+    switch (membersV2.get(caller)) {
+      case (?p) { if (p.status == #approved) { services.values().toArray() } else { [] } };
       case null { [] };
     };
   };
@@ -141,15 +220,31 @@ actor {
   // --- Admin Functions ---
   public query ({ caller }) func adminGetAllMembers() : async [MemberProfile] {
     if (not AccessControl.isAdmin(accessControlState, caller)) { return [] };
-    members.values().toArray();
+    membersV2.values().toArray();
+  };
+
+  public shared ({ caller }) func adminConfirmPayment(member : Principal) : async Bool {
+    if (not AccessControl.isAdmin(accessControlState, caller)) { return false };
+    switch (membersV2.get(member)) {
+      case null { false };
+      case (?p) { membersV2.add(member, { p with status = #waiting_hair_samples; paymentConfirmed = true }); true };
+    };
+  };
+
+  public shared ({ caller }) func adminMarkHairSamplesReceived(member : Principal) : async Bool {
+    if (not AccessControl.isAdmin(accessControlState, caller)) { return false };
+    switch (membersV2.get(member)) {
+      case null { false };
+      case (?p) { membersV2.add(member, { p with status = #hair_samples_received }); true };
+    };
   };
 
   public shared ({ caller }) func adminApproveMember(member : Principal) : async Bool {
     if (not AccessControl.isAdmin(accessControlState, caller)) { return false };
-    switch (members.get(member)) {
+    switch (membersV2.get(member)) {
       case null { false };
       case (?p) {
-        members.add(member, { p with status = #approved });
+        membersV2.add(member, { p with status = #approved });
         Approval.setApproval(approvalState, member, #approved);
         true;
       };
@@ -158,10 +253,10 @@ actor {
 
   public shared ({ caller }) func adminRejectMember(member : Principal) : async Bool {
     if (not AccessControl.isAdmin(accessControlState, caller)) { return false };
-    switch (members.get(member)) {
+    switch (membersV2.get(member)) {
       case null { false };
       case (?p) {
-        members.add(member, { p with status = #rejected });
+        membersV2.add(member, { p with status = #rejected });
         Approval.setApproval(approvalState, member, #rejected);
         true;
       };

@@ -24,9 +24,9 @@ import {
   useRegisterMember,
 } from "../hooks/useQueries";
 
-const UPI_ID = "focliy@upi";
+const UPI_ID = "9910926329@idfcfirst";
 const UPI_NAME = "Focliy";
-const AMOUNT = "535";
+const AMOUNT = "799";
 
 function generateRefId(name: string, phone: string): string {
   const ts = Date.now().toString(36).toUpperCase();
@@ -97,8 +97,14 @@ export default function OnboardPage() {
     );
   }
 
-  // If already registered with payment confirmed, go to dashboard
-  if (profile?.paymentConfirmed) {
+  // If payment already submitted or beyond, go to dashboard
+  if (
+    profile &&
+    ("payment_submitted" in profile.status ||
+      "waiting_hair_samples" in profile.status ||
+      "hair_samples_received" in profile.status ||
+      "approved" in profile.status)
+  ) {
     navigate({ to: "/dashboard" });
     return null;
   }
@@ -161,10 +167,12 @@ export default function OnboardPage() {
     try {
       const ok = await confirmPayment.mutateAsync();
       if (ok) {
-        toast.success("Payment confirmed! Your membership is under review.");
+        toast.success(
+          "Payment submitted! Our team will verify it within 1-2 business days.",
+        );
         navigate({ to: "/dashboard" });
       } else {
-        toast.error("Could not confirm payment. Please try again.");
+        toast.error("Could not submit payment. Please try again.");
       }
     } catch (err) {
       console.error("[Focliy] confirmPayment error:", err);
@@ -307,7 +315,7 @@ export default function OnboardPage() {
               animate={{ opacity: 1, y: 0 }}
             >
               <div className="mb-8 text-center">
-                <h1 className="font-display text-3xl font-bold">Pay ₹535</h1>
+                <h1 className="font-display text-3xl font-bold">Pay ₹799</h1>
                 <p className="text-muted-foreground mt-2">
                   Scan the QR code below to complete your membership payment.
                 </p>
@@ -353,8 +361,8 @@ export default function OnboardPage() {
                     </div>
 
                     <p className="text-xs text-muted-foreground text-center">
-                      After paying, click the button below. We'll send your hair
-                      sample kit within 2-3 business days.
+                      After paying, click the button below. Our team will verify
+                      your payment within 1-2 business days.
                     </p>
 
                     <Button

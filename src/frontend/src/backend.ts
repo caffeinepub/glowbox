@@ -92,6 +92,10 @@ export interface backendInterface {
     getCallerUserRole(): Promise<UserRole>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     isCallerAdmin(): Promise<boolean>;
+    createAccount(email: string): Promise<boolean>;
+    refreshAccountRole(email: string): Promise<boolean>;
+    getPrincipalForEmail(email: string): Promise<[] | [Principal]>;
+    emailExists(email: string): Promise<boolean>;
     registerMember(name: string, phone: string, address: string): Promise<boolean>;
     confirmPayment(): Promise<boolean>;
     getMyProfile(): Promise<[] | [MemberProfile]>;
@@ -128,6 +132,22 @@ export class Backend implements backendInterface {
     }
     async isCallerAdmin(): Promise<boolean> {
         try { return await (this.actor as any).isCallerAdmin(); }
+        catch (e) { if (this.processError) this.processError(e); throw e; }
+    }
+    async createAccount(email: string): Promise<boolean> {
+        try { return await (this.actor as any).createAccount(email); }
+        catch (e) { if (this.processError) this.processError(e); throw e; }
+    }
+    async refreshAccountRole(email: string): Promise<boolean> {
+        try { return await (this.actor as any).refreshAccountRole(email); }
+        catch (e) { if (this.processError) this.processError(e); throw e; }
+    }
+    async getPrincipalForEmail(email: string): Promise<[] | [Principal]> {
+        try { return await (this.actor as any).getPrincipalForEmail(email); }
+        catch (e) { if (this.processError) this.processError(e); throw e; }
+    }
+    async emailExists(email: string): Promise<boolean> {
+        try { return await (this.actor as any).emailExists(email); }
         catch (e) { if (this.processError) this.processError(e); throw e; }
     }
     async registerMember(name: string, phone: string, address: string): Promise<boolean> {
