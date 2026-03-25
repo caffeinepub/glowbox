@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -33,30 +34,49 @@ import type { Principal } from "@icp-sdk/core/principal";
 import { useNavigate } from "@tanstack/react-router";
 import {
   CheckCircle2,
+  Copy,
+  Edit,
+  ImagePlus,
   Loader2,
   Package,
   Plus,
   ShieldAlert,
+  ShoppingCart,
+  Star,
   Trash2,
   XCircle,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
-import type { MemberStatus, ServiceCategory } from "../backend.d";
+import type {
+  MemberStatus,
+  Order,
+  OrderItem,
+  ProductCategory,
+  ServiceCategory,
+} from "../backend.d";
 import Footer from "../components/Footer";
 import Header from "../components/Header";
+import { useActor } from "../hooks/useActor";
 import { useAuth } from "../hooks/useAuth";
 import {
+  useAdminAddProduct,
   useAdminAddSalon,
   useAdminAddService,
   useAdminApproveMember,
   useAdminConfirmPayment,
   useAdminGetAllMembers,
+  useAdminGetAllOrders,
   useAdminMarkHairSamplesReceived,
   useAdminRejectMember,
+  useAdminRemoveProduct,
   useAdminRemoveSalon,
   useAdminRemoveService,
+  useAdminToggleProductFeatured,
+  useAdminToggleProductStock,
+  useAdminUpdateProduct,
+  useGetAllProducts,
   useGetAllSalons,
   useGetApprovedServices,
   useIsAdmin,
@@ -84,6 +104,30 @@ const SERVICE_CATEGORIES: { value: string; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
+const PRODUCT_CATEGORIES: { value: string; label: string }[] = [
+  { value: "hair_care", label: "Hair Care" },
+  { value: "shampoo", label: "Shampoo" },
+  { value: "conditioner", label: "Conditioner" },
+  { value: "skin_care", label: "Skin Care" },
+  { value: "makeup", label: "Makeup" },
+  { value: "accessories", label: "Accessories" },
+  { value: "nail_care", label: "Nail Care" },
+  { value: "facewash", label: "Facewash" },
+  { value: "other", label: "Other" },
+];
+
+const PRODUCT_CATEGORY_LABELS: Record<string, string> = {
+  hair_care: "Hair Care",
+  shampoo: "Shampoo",
+  conditioner: "Conditioner",
+  skin_care: "Skin Care",
+  makeup: "Makeup",
+  accessories: "Accessories",
+  nail_care: "Nail Care",
+  facewash: "Facewash",
+  other: "Other",
+};
+
 function categoryToMotoko(val: string): ServiceCategory {
   const map: Record<string, ServiceCategory> = {
     haircare: { haircare: null },
@@ -95,14 +139,38 @@ function categoryToMotoko(val: string): ServiceCategory {
   return map[val] ?? { other: null };
 }
 
+function categoryToProductMotoko(val: string): ProductCategory {
+  const map: Record<string, ProductCategory> = {
+    hair_care: { hair_care: null },
+    shampoo: { shampoo: null },
+    conditioner: { conditioner: null },
+    skin_care: { skin_care: null },
+    makeup: { makeup: null },
+    accessories: { accessories: null },
+    nail_care: { nail_care: null },
+    facewash: { facewash: null },
+    other: { other: null },
+  };
+  return map[val] ?? { other: null };
+}
+
+function getProductCategoryKey(cat: ProductCategory): string {
+  return Object.keys(cat)[0];
+}
+
 export default function AdminPage() {
   const { identity, isInitializing } = useAuth();
   const navigate = useNavigate();
+  const { actor } = useActor();
   const { data: isAdmin, isLoading: adminLoading } = useIsAdmin();
   const { data: members = [], isLoading: membersLoading } =
     useAdminGetAllMembers();
+  const { data: orders = [], isLoading: ordersLoading } =
+    useAdminGetAllOrders();
   const { data: salons = [] } = useGetAllSalons();
   const { data: services = [] } = useGetApprovedServices();
+  const { data: products = [], isLoading: productsLoading } =
+    useGetAllProducts();
 
   const confirmPaymentAdmin = useAdminConfirmPayment();
   const markSamplesReceived = useAdminMarkHairSamplesReceived();
@@ -112,17 +180,42 @@ export default function AdminPage() {
   const addService = useAdminAddService();
   const removeSalon = useAdminRemoveSalon();
   const removeService = useAdminRemoveService();
+  const addProduct = useAdminAddProduct();
+  const updateProduct = useAdminUpdateProduct();
+  const removeProduct = useAdminRemoveProduct();
+  const toggleStock = useAdminToggleProductStock();
+  const toggleFeatured = useAdminToggleProductFeatured();
 
+  // Salon state
   const [salonDialogOpen, setSalonDialogOpen] = useState(false);
   const [salonName, setSalonName] = useState("");
   const [salonLocation, setSalonLocation] = useState("");
   const [salonDesc, setSalonDesc] = useState("");
 
+  // Service state
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
   const [serviceSalonId, setServiceSalonId] = useState("");
   const [serviceName, setServiceName] = useState("");
   const [serviceDesc, setServiceDesc] = useState("");
   const [serviceCategory, setServiceCategory] = useState("");
+
+  // Product state
+  const [productDialogOpen, setProductDialogOpen] = useState(false);
+  const [editProductId, setEditProductId] = useState<bigint | null>(null);
+  const [productName, setProductName] = useState("");
+  const [productDesc, setProductDesc] = useState("");
+  const [productPrice, setProductPrice] = useState("");
+  const [productCategory, setProductCategory] = useState("");
+  const [productExistingImageUrls, setProductExistingImageUrls] = useState<
+    string[]
+  >([]);
+  const [productImageFiles, setProductImageFiles] = useState<File[]>([]);
+  const [productImageUploading, setProductImageUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<Record<number, number>>(
+    {},
+  );
+  const [productInStock, setProductInStock] = useState(true);
+  const [productFeatured, setProductFeatured] = useState(false);
 
   if (isInitializing) {
     return null;
@@ -160,7 +253,7 @@ export default function AdminPage() {
             <ShieldAlert className="w-16 h-16 mx-auto text-destructive opacity-60" />
             <h1 className="font-display text-2xl font-bold">Access Denied</h1>
             <p className="text-muted-foreground">
-              You don't have admin privileges.
+              You don&apos;t have admin privileges.
             </p>
             <Button
               onClick={() => navigate({ to: "/dashboard" })}
@@ -275,6 +368,128 @@ export default function AdminPage() {
     }
   };
 
+  const resetProductForm = () => {
+    setEditProductId(null);
+    setProductName("");
+    setProductDesc("");
+    setProductPrice("");
+    setProductCategory("");
+    setProductExistingImageUrls([]);
+    setProductImageFiles([]);
+    setUploadProgress({});
+    setProductInStock(true);
+    setProductFeatured(false);
+  };
+
+  const openEditProduct = (p: {
+    id: bigint;
+    name: string;
+    description: string;
+    price: bigint;
+    category: ProductCategory;
+    imageUrl: string;
+    inStock: boolean;
+    featured: boolean;
+  }) => {
+    setEditProductId(p.id);
+    setProductName(p.name);
+    setProductDesc(p.description);
+    setProductPrice(p.price.toString());
+    setProductCategory(getProductCategoryKey(p.category));
+    setProductExistingImageUrls(
+      p.imageUrl ? p.imageUrl.split("|").filter(Boolean) : [],
+    );
+    setProductImageFiles([]);
+    setUploadProgress({});
+    setProductInStock(p.inStock);
+    setProductFeatured(p.featured);
+    setProductDialogOpen(true);
+  };
+
+  const handleSaveProduct = async () => {
+    if (!productName.trim() || !productPrice || !productCategory) {
+      toast.error("Name, price and category are required.");
+      return;
+    }
+    if (!actor) {
+      toast.error("Actor not available. Please try again.");
+      return;
+    }
+
+    const price = BigInt(Math.round(Number(productPrice)));
+    const cat = categoryToProductMotoko(productCategory);
+
+    // Upload each new image file
+    let uploadedUrls: string[] = [];
+    if (productImageFiles.length > 0) {
+      setProductImageUploading(true);
+      try {
+        const newProgress: Record<number, number> = {};
+        for (let i = 0; i < productImageFiles.length; i++) {
+          newProgress[i] = 0;
+        }
+        setUploadProgress(newProgress);
+
+        const uploadPromises = productImageFiles.map(async (file, idx) => {
+          const url = await (actor as any).uploadProductImage(file);
+          setUploadProgress((prev) => ({ ...prev, [idx]: 100 }));
+          return url as string;
+        });
+        uploadedUrls = await Promise.all(uploadPromises);
+      } catch (err) {
+        console.error("[Focliy] Image upload error:", err);
+        toast.error("Failed to upload one or more images.");
+        setProductImageUploading(false);
+        return;
+      }
+      setProductImageUploading(false);
+    }
+
+    // Combine existing + newly uploaded URLs
+    const allImageUrls = [...productExistingImageUrls, ...uploadedUrls];
+    const finalImageUrl = allImageUrls.join("|");
+
+    try {
+      if (editProductId !== null) {
+        await updateProduct.mutateAsync({
+          id: editProductId,
+          name: productName,
+          description: productDesc,
+          price,
+          category: cat,
+          imageUrl: finalImageUrl,
+          inStock: productInStock,
+          featured: productFeatured,
+        });
+        toast.success("Product updated!");
+      } else {
+        await addProduct.mutateAsync({
+          name: productName,
+          description: productDesc,
+          price,
+          category: cat,
+          imageUrl: finalImageUrl,
+          inStock: productInStock,
+          featured: productFeatured,
+        });
+        toast.success("Product added!");
+      }
+      setProductDialogOpen(false);
+      resetProductForm();
+    } catch {
+      toast.error("Failed to save product.");
+    }
+  };
+
+  const handleRemoveProduct = async (id: bigint) => {
+    try {
+      await removeProduct.mutateAsync(id);
+      toast.success("Product removed.");
+    } catch {
+      toast.error("Failed to remove product.");
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
@@ -287,7 +502,7 @@ export default function AdminPage() {
           >
             <h1 className="font-display text-3xl font-bold">Admin Panel</h1>
             <p className="text-muted-foreground mt-1">
-              Manage members and salon services.
+              Manage members, products, and salon services.
             </p>
           </motion.div>
 
@@ -296,11 +511,18 @@ export default function AdminPage() {
               <TabsTrigger value="members" data-ocid="admin.members.tab">
                 Members ({members.length})
               </TabsTrigger>
+              <TabsTrigger value="products" data-ocid="admin.products.tab">
+                Products ({products.length})
+              </TabsTrigger>
               <TabsTrigger value="salons" data-ocid="admin.salons.tab">
                 Salons & Services ({salons.length})
               </TabsTrigger>
+              <TabsTrigger value="orders" data-ocid="admin.orders.tab">
+                Orders ({orders.length})
+              </TabsTrigger>
             </TabsList>
 
+            {/* ---- MEMBERS TAB ---- */}
             <TabsContent value="members">
               <Card>
                 <CardHeader>
@@ -314,8 +536,8 @@ export default function AdminPage() {
                       className="space-y-3"
                       data-ocid="admin.members.loading_state"
                     >
-                      {[1, 2, 3].map((i) => (
-                        <Skeleton key={i} className="h-12 w-full" />
+                      {[1, 2, 3].map((_i) => (
+                        <Skeleton key={_i} className="h-12 w-full" />
                       ))}
                     </div>
                   ) : members.length === 0 ? (
@@ -335,8 +557,10 @@ export default function AdminPage() {
                           <TableRow>
                             <TableHead>Name</TableHead>
                             <TableHead>Phone</TableHead>
+                            <TableHead>Address</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead>Payment</TableHead>
+                            <TableHead>Payment Ref ID</TableHead>
                             <TableHead>Actions</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -364,6 +588,9 @@ export default function AdminPage() {
                                 <TableCell className="text-muted-foreground">
                                   {member.phone}
                                 </TableCell>
+                                <TableCell className="text-muted-foreground text-xs max-w-[150px] truncate">
+                                  {member.address || "-"}
+                                </TableCell>
                                 <TableCell>
                                   <Badge
                                     className={`${sl.cls} text-xs border-0`}
@@ -384,6 +611,32 @@ export default function AdminPage() {
                                       ? "Confirmed"
                                       : "Pending"}
                                   </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  {member.paymentRefId ? (
+                                    <div className="flex items-center gap-1.5">
+                                      <code className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded max-w-[140px] truncate block">
+                                        {member.paymentRefId}
+                                      </code>
+                                      <button
+                                        type="button"
+                                        className="text-muted-foreground hover:text-foreground"
+                                        onClick={() => {
+                                          navigator.clipboard.writeText(
+                                            member.paymentRefId,
+                                          );
+                                          toast.success("Copied!");
+                                        }}
+                                        data-ocid={`admin.members.copy_button.${idx + 1}`}
+                                      >
+                                        <Copy className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <span className="text-muted-foreground text-xs">
+                                      -
+                                    </span>
+                                  )}
                                 </TableCell>
                                 <TableCell>
                                   {hasActions && (
@@ -470,6 +723,361 @@ export default function AdminPage() {
               </Card>
             </TabsContent>
 
+            {/* ---- PRODUCTS TAB ---- */}
+            <TabsContent value="products">
+              <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+                <h2 className="font-display text-xl font-semibold">Products</h2>
+                <Dialog
+                  open={productDialogOpen}
+                  onOpenChange={(open) => {
+                    setProductDialogOpen(open);
+                    if (!open) resetProductForm();
+                  }}
+                >
+                  <DialogTrigger asChild>
+                    <Button
+                      size="sm"
+                      className="gap-2"
+                      data-ocid="admin.add_product.open_modal_button"
+                    >
+                      <Plus className="w-4 h-4" /> Add Product
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent
+                    className="max-w-lg max-h-[90vh] overflow-y-auto"
+                    data-ocid="admin.add_product.dialog"
+                  >
+                    <DialogHeader>
+                      <DialogTitle className="font-display">
+                        {editProductId !== null
+                          ? "Edit Product"
+                          : "Add New Product"}
+                      </DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                      <div className="space-y-2">
+                        <Label>Product Name *</Label>
+                        <Input
+                          placeholder="Argan Oil Shampoo"
+                          value={productName}
+                          onChange={(e) => setProductName(e.target.value)}
+                          data-ocid="admin.product_name.input"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Description</Label>
+                        <Textarea
+                          placeholder="Rich nourishing shampoo with..."
+                          value={productDesc}
+                          onChange={(e) => setProductDesc(e.target.value)}
+                          data-ocid="admin.product_desc.textarea"
+                          rows={3}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Price (₹) *</Label>
+                          <Input
+                            type="number"
+                            placeholder="599"
+                            value={productPrice}
+                            onChange={(e) => setProductPrice(e.target.value)}
+                            data-ocid="admin.product_price.input"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Category *</Label>
+                          <Select
+                            value={productCategory}
+                            onValueChange={setProductCategory}
+                          >
+                            <SelectTrigger data-ocid="admin.product_category.select">
+                              <SelectValue placeholder="Select" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {PRODUCT_CATEGORIES.map((c) => (
+                                <SelectItem key={c.value} value={c.value}>
+                                  {c.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      {/* Image upload section */}
+                      <div className="space-y-3">
+                        <Label className="flex items-center gap-2">
+                          <ImagePlus className="w-4 h-4" />
+                          Product Images
+                        </Label>
+
+                        {/* Existing images (when editing) */}
+                        {productExistingImageUrls.length > 0 && (
+                          <div className="space-y-2">
+                            <p className="text-xs text-muted-foreground">
+                              Current images:
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {productExistingImageUrls.map((url, i) => (
+                                <div key={url} className="relative group">
+                                  <img
+                                    src={url}
+                                    alt={`Product ${i + 1}`}
+                                    className="w-20 h-20 object-cover rounded-lg border"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setProductExistingImageUrls((prev) =>
+                                        prev.filter((_, idx) => idx !== i),
+                                      )
+                                    }
+                                    className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-destructive text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* New image file input */}
+                        <Input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="cursor-pointer"
+                          onChange={(e) => {
+                            const files = Array.from(e.target.files ?? []);
+                            setProductImageFiles(files);
+                            setUploadProgress({});
+                          }}
+                          data-ocid="admin.product_image.upload_button"
+                        />
+
+                        {/* New file previews */}
+                        {productImageFiles.length > 0 && (
+                          <div className="space-y-2">
+                            <p className="text-xs text-muted-foreground">
+                              New images to upload ({productImageFiles.length}):
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {productImageFiles.map((file, i) => (
+                                <div
+                                  key={`${file.name}-${i}`}
+                                  className="relative"
+                                >
+                                  <img
+                                    src={URL.createObjectURL(file)}
+                                    alt={file.name}
+                                    className="w-20 h-20 object-cover rounded-lg border"
+                                  />
+                                  {productImageUploading && (
+                                    <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center">
+                                      <span className="text-white text-xs font-bold">
+                                        {uploadProgress[i] ?? 0}%
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:bg-destructive/10 text-xs"
+                              onClick={() => {
+                                setProductImageFiles([]);
+                                setUploadProgress({});
+                              }}
+                            >
+                              Clear new files
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex gap-6">
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            id="instock"
+                            checked={productInStock}
+                            onCheckedChange={(v) => setProductInStock(!!v)}
+                            data-ocid="admin.product_instock.checkbox"
+                          />
+                          <Label htmlFor="instock">In Stock</Label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            id="featured"
+                            checked={productFeatured}
+                            onCheckedChange={(v) => setProductFeatured(!!v)}
+                            data-ocid="admin.product_featured.checkbox"
+                          />
+                          <Label htmlFor="featured">Featured</Label>
+                        </div>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setProductDialogOpen(false);
+                          resetProductForm();
+                        }}
+                        data-ocid="admin.add_product.cancel_button"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={handleSaveProduct}
+                        disabled={
+                          addProduct.isPending ||
+                          updateProduct.isPending ||
+                          productImageUploading
+                        }
+                        data-ocid="admin.add_product.confirm_button"
+                      >
+                        {productImageUploading ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                            Uploading...
+                          </>
+                        ) : addProduct.isPending || updateProduct.isPending ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : editProductId !== null ? (
+                          "Save Changes"
+                        ) : (
+                          "Add Product"
+                        )}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
+
+              {productsLoading ? (
+                <div
+                  className="space-y-3"
+                  data-ocid="admin.products.loading_state"
+                >
+                  {[1, 2, 3].map((_i) => (
+                    <Skeleton key={_i} className="h-14 w-full" />
+                  ))}
+                </div>
+              ) : products.length === 0 ? (
+                <Card data-ocid="admin.products.empty_state">
+                  <CardContent className="py-12 text-center text-muted-foreground">
+                    No products yet. Add your first product!
+                  </CardContent>
+                </Card>
+              ) : (
+                <div
+                  className="overflow-x-auto"
+                  data-ocid="admin.products.table"
+                >
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Category</TableHead>
+                        <TableHead>Price</TableHead>
+                        <TableHead>Stock</TableHead>
+                        <TableHead>Featured</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {products.map((product, idx) => (
+                        <TableRow
+                          key={product.id.toString()}
+                          data-ocid={`admin.products.row.${idx + 1}`}
+                        >
+                          <TableCell className="font-medium">
+                            {product.name}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary" className="text-xs">
+                              {PRODUCT_CATEGORY_LABELS[
+                                getProductCategoryKey(product.category)
+                              ] ?? "Other"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-mono text-sm">
+                            ₹{product.price.toString()}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className={
+                                product.inStock
+                                  ? "text-green-700"
+                                  : "text-muted-foreground"
+                              }
+                              onClick={() =>
+                                toggleStock.mutateAsync(product.id)
+                              }
+                              disabled={toggleStock.isPending}
+                              data-ocid={`admin.products.toggle.${idx + 1}`}
+                            >
+                              {product.inStock ? "In Stock" : "Out of Stock"}
+                            </Button>
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className={
+                                product.featured
+                                  ? "text-yellow-600"
+                                  : "text-muted-foreground"
+                              }
+                              onClick={() =>
+                                toggleFeatured.mutateAsync(product.id)
+                              }
+                              disabled={toggleFeatured.isPending}
+                              data-ocid={`admin.products.secondary_button.${idx + 1}`}
+                            >
+                              <Star
+                                className={`w-4 h-4 ${product.featured ? "fill-yellow-500" : ""}`}
+                              />
+                            </Button>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-2">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => openEditProduct(product)}
+                                data-ocid={`admin.products.edit_button.${idx + 1}`}
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="text-destructive hover:bg-destructive/10"
+                                onClick={() => handleRemoveProduct(product.id)}
+                                disabled={removeProduct.isPending}
+                                data-ocid={`admin.products.delete_button.${idx + 1}`}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </TabsContent>
+
+            {/* ---- SALONS TAB ---- */}
             <TabsContent value="salons">
               <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
                 <h2 className="font-display text-xl font-semibold">
@@ -738,6 +1346,101 @@ export default function AdminPage() {
                   ))}
                 </div>
               )}
+            </TabsContent>
+
+            {/* ---- ORDERS TAB ---- */}
+            <TabsContent value="orders">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="font-display text-xl flex items-center gap-2">
+                    <ShoppingCart className="w-5 h-5" />
+                    All Orders
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {ordersLoading ? (
+                    <div className="space-y-3">
+                      {[1, 2, 3].map((_i) => (
+                        <Skeleton key={_i} className="h-12 w-full" />
+                      ))}
+                    </div>
+                  ) : orders.length === 0 ? (
+                    <div className="py-12 text-center text-muted-foreground">
+                      No orders placed yet.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Order ID</TableHead>
+                            <TableHead>Customer</TableHead>
+                            <TableHead>Phone</TableHead>
+                            <TableHead>Address</TableHead>
+                            <TableHead>Items</TableHead>
+                            <TableHead>Total</TableHead>
+                            <TableHead>Date</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {[...orders]
+                            .sort(
+                              (a, b) => Number(b.placedAt) - Number(a.placedAt),
+                            )
+                            .map((order, idx) => (
+                              <TableRow
+                                key={order.id.toString()}
+                                data-ocid={`admin.orders.row.${idx + 1}`}
+                              >
+                                <TableCell className="font-mono text-xs font-medium text-primary">
+                                  {order.orderId}
+                                </TableCell>
+                                <TableCell className="font-medium">
+                                  {order.customerName}
+                                </TableCell>
+                                <TableCell className="text-muted-foreground">
+                                  {order.customerPhone}
+                                </TableCell>
+                                <TableCell className="text-muted-foreground text-xs max-w-[200px]">
+                                  <div>{order.customerAddress}</div>
+                                  <div className="text-xs opacity-70">
+                                    Pin: {order.customerPincode}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="space-y-0.5">
+                                    {order.items.map((item) => (
+                                      <div
+                                        key={item.productId.toString()}
+                                        className="text-xs text-muted-foreground"
+                                      >
+                                        {item.productName} ×
+                                        {item.quantity.toString()} @ ₹
+                                        {item.price.toString()}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="font-bold text-primary">
+                                  ₹{order.totalAmount.toString()}
+                                </TableCell>
+                                <TableCell className="text-muted-foreground text-xs">
+                                  {new Date(
+                                    Number(order.placedAt / 1_000_000n),
+                                  ).toLocaleDateString("en-IN", {
+                                    day: "2-digit",
+                                    month: "short",
+                                    year: "numeric",
+                                  })}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </TabsContent>
           </Tabs>
         </div>

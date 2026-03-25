@@ -23,6 +23,28 @@ export type ServiceCategory =
     | { nails: null }
     | { other: null };
 
+export type ProductCategory =
+    | { hair_care: null }
+    | { shampoo: null }
+    | { conditioner: null }
+    | { skin_care: null }
+    | { makeup: null }
+    | { accessories: null }
+    | { nail_care: null }
+    | { facewash: null }
+    | { other: null };
+
+export interface Product {
+    id: bigint;
+    name: string;
+    description: string;
+    price: bigint;
+    category: ProductCategory;
+    imageUrl: string;
+    inStock: boolean;
+    featured: boolean;
+}
+
 export interface MemberProfile {
     principal: Principal;
     name: string;
@@ -30,6 +52,7 @@ export interface MemberProfile {
     address: string;
     status: MemberStatus;
     paymentConfirmed: boolean;
+    paymentRefId: string;
     registeredAt: bigint;
 }
 
@@ -48,6 +71,27 @@ export interface SalonService {
     category: ServiceCategory;
 }
 
+
+export interface OrderItem {
+    productId: bigint;
+    productName: string;
+    quantity: bigint;
+    price: bigint;
+}
+
+export interface Order {
+    id: bigint;
+    orderId: string;
+    customerPrincipal: Principal;
+    customerName: string;
+    customerPhone: string;
+    customerAddress: string;
+    customerPincode: string;
+    items: OrderItem[];
+    totalAmount: bigint;
+    placedAt: bigint;
+}
+
 export interface backendInterface {
     _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
     getCallerUserRole(): Promise<UserRole>;
@@ -58,7 +102,7 @@ export interface backendInterface {
     emailExists(email: string): Promise<boolean>;
     getPrincipalForEmail(email: string): Promise<[] | [Principal]>;
     registerMember(name: string, phone: string, address: string): Promise<boolean>;
-    confirmPayment(): Promise<boolean>;
+    confirmPayment(refId: string): Promise<boolean>;
     getMyProfile(): Promise<[] | [MemberProfile]>;
     getApprovedServices(): Promise<SalonService[]>;
     getAllSalons(): Promise<Salon[]>;
@@ -71,4 +115,14 @@ export interface backendInterface {
     adminAddService(salonId: bigint, name: string, description: string, category: ServiceCategory): Promise<[] | [bigint]>;
     adminRemoveSalon(id: bigint): Promise<boolean>;
     adminRemoveService(id: bigint): Promise<boolean>;
+    getAllProducts(): Promise<Product[]>;
+    getProductById(id: bigint): Promise<[] | [Product]>;
+    adminAddProduct(name: string, description: string, price: bigint, category: ProductCategory, imageUrl: string, inStock: boolean, featured: boolean): Promise<[] | [bigint]>;
+    adminUpdateProduct(id: bigint, name: string, description: string, price: bigint, category: ProductCategory, imageUrl: string, inStock: boolean, featured: boolean): Promise<boolean>;
+    adminRemoveProduct(id: bigint): Promise<boolean>;
+    adminToggleProductStock(id: bigint): Promise<boolean>;
+    adminToggleProductFeatured(id: bigint): Promise<boolean>;
+    uploadProductImage(file: File): Promise<string>;
+    placeOrder(orderId: string, customerName: string, customerPhone: string, customerAddress: string, customerPincode: string, items: OrderItem[], totalAmount: bigint): Promise<boolean>;
+    adminGetAllOrders(): Promise<Order[]>;
 }

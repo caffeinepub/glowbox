@@ -1,39 +1,21 @@
 /* eslint-disable */
-
 // @ts-nocheck
 
 import { Actor, HttpAgent, type HttpAgentOptions, type ActorConfig, type Agent, type ActorSubclass } from "@icp-sdk/core/agent";
 import type { Principal } from "@icp-sdk/core/principal";
 import { idlFactory, type _SERVICE } from "./declarations/backend.did";
-export interface Some<T> {
-    __kind__: "Some";
-    value: T;
-}
-export interface None {
-    __kind__: "None";
-}
+export interface Some<T> { __kind__: "Some"; value: T; }
+export interface None { __kind__: "None"; }
 export type Option<T> = Some<T> | None;
-function some<T>(value: T): Some<T> {
-    return { __kind__: "Some", value: value };
-}
-function none(): None {
-    return { __kind__: "None" };
-}
-function isNone<T>(option: Option<T>): option is None {
-    return option.__kind__ === "None";
-}
-function isSome<T>(option: Option<T>): option is Some<T> {
-    return option.__kind__ === "Some";
-}
-function unwrap<T>(option: Option<T>): T {
-    if (isNone(option)) throw new Error("unwrap: none");
-    return option.value;
-}
+function some<T>(value: T): Some<T> { return { __kind__: "Some", value: value }; }
+function none(): None { return { __kind__: "None" }; }
+function isNone<T>(option: Option<T>): option is None { return option.__kind__ === "None"; }
+function isSome<T>(option: Option<T>): option is Some<T> { return option.__kind__ === "Some"; }
+function unwrap<T>(option: Option<T>): T { if (isNone(option)) throw new Error("unwrap: none"); return option.value; }
 function candid_some<T>(value: T): [T] { return [value]; }
 function candid_none<T>(): [] { return []; }
-function record_opt_to_undefined<T>(arg: T | null): T | undefined {
-    return arg == null ? undefined : arg;
-}
+function record_opt_to_undefined<T>(arg: T | null): T | undefined { return arg == null ? undefined : arg; }
+
 export class ExternalBlob {
     _blob?: Uint8Array<ArrayBuffer> | null;
     directURL: string;
@@ -62,8 +44,10 @@ export class ExternalBlob {
 }
 
 export type UserRole = { admin: null } | { user: null } | { guest: null };
-export type MemberStatus = { approved: null } | { pending_inspection: null } | { pending_payment: null } | { rejected: null };
+export type MemberStatus = { approved: null } | { pending_inspection: null } | { pending_payment: null } | { payment_submitted: null } | { waiting_hair_samples: null } | { hair_samples_received: null } | { rejected: null };
 export type ServiceCategory = { haircare: null } | { skincare: null } | { makeup: null } | { nails: null } | { other: null };
+export type ProductCategory = { hair_care: null } | { shampoo: null } | { conditioner: null } | { skin_care: null } | { makeup: null } | { accessories: null } | { nail_care: null } | { facewash: null } | { other: null };
+
 export interface MemberProfile {
     principal: Principal;
     name: string;
@@ -71,6 +55,7 @@ export interface MemberProfile {
     address: string;
     status: MemberStatus;
     paymentConfirmed: boolean;
+    paymentRefId: string;
     registeredAt: bigint;
 }
 export interface Salon {
@@ -86,6 +71,34 @@ export interface SalonService {
     description: string;
     category: ServiceCategory;
 }
+export interface Product {
+    id: bigint;
+    name: string;
+    description: string;
+    price: bigint;
+    category: ProductCategory;
+    imageUrl: string;
+    inStock: boolean;
+    featured: boolean;
+}
+export interface OrderItem {
+    productId: bigint;
+    productName: string;
+    quantity: bigint;
+    price: bigint;
+}
+export interface Order {
+    id: bigint;
+    orderId: string;
+    customerPrincipal: Principal;
+    customerName: string;
+    customerPhone: string;
+    customerAddress: string;
+    customerPincode: string;
+    items: OrderItem[];
+    totalAmount: bigint;
+    placedAt: bigint;
+}
 
 export interface backendInterface {
     _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
@@ -97,17 +110,30 @@ export interface backendInterface {
     getPrincipalForEmail(email: string): Promise<[] | [Principal]>;
     emailExists(email: string): Promise<boolean>;
     registerMember(name: string, phone: string, address: string): Promise<boolean>;
-    confirmPayment(): Promise<boolean>;
+    confirmPayment(refId: string): Promise<boolean>;
     getMyProfile(): Promise<[] | [MemberProfile]>;
     getApprovedServices(): Promise<SalonService[]>;
     getAllSalons(): Promise<Salon[]>;
     adminGetAllMembers(): Promise<MemberProfile[]>;
+    adminConfirmPayment(member: Principal): Promise<boolean>;
+    adminMarkHairSamplesReceived(member: Principal): Promise<boolean>;
     adminApproveMember(member: Principal): Promise<boolean>;
     adminRejectMember(member: Principal): Promise<boolean>;
     adminAddSalon(name: string, location: string, description: string): Promise<[] | [bigint]>;
     adminAddService(salonId: bigint, name: string, description: string, category: ServiceCategory): Promise<[] | [bigint]>;
     adminRemoveSalon(id: bigint): Promise<boolean>;
     adminRemoveService(id: bigint): Promise<boolean>;
+    getAllProducts(): Promise<Product[]>;
+    getProductById(id: bigint): Promise<[] | [Product]>;
+    adminAddProduct(name: string, description: string, price: bigint, category: ProductCategory, imageUrl: string, inStock: boolean, featured: boolean): Promise<[] | [bigint]>;
+    adminUpdateProduct(id: bigint, name: string, description: string, price: bigint, category: ProductCategory, imageUrl: string, inStock: boolean, featured: boolean): Promise<boolean>;
+    adminRemoveProduct(id: bigint): Promise<boolean>;
+    adminToggleProductStock(id: bigint): Promise<boolean>;
+    adminToggleProductFeatured(id: bigint): Promise<boolean>;
+    uploadProductImage(file: File): Promise<string>;
+    placeOrder(orderId: string, customerName: string, customerPhone: string, customerAddress: string, customerPincode: string, items: OrderItem[], totalAmount: bigint): Promise<[] | [bigint]>;
+    getMyOrders(): Promise<Order[]>;
+    adminGetAllOrders(): Promise<Order[]>;
 }
 
 export class Backend implements backendInterface {
@@ -154,8 +180,8 @@ export class Backend implements backendInterface {
         try { return await (this.actor as any).registerMember(name, phone, address); }
         catch (e) { if (this.processError) this.processError(e); throw e; }
     }
-    async confirmPayment(): Promise<boolean> {
-        try { return await (this.actor as any).confirmPayment(); }
+    async confirmPayment(refId: string): Promise<boolean> {
+        try { return await (this.actor as any).confirmPayment(refId); }
         catch (e) { if (this.processError) this.processError(e); throw e; }
     }
     async getMyProfile(): Promise<[] | [MemberProfile]> {
@@ -172,6 +198,14 @@ export class Backend implements backendInterface {
     }
     async adminGetAllMembers(): Promise<MemberProfile[]> {
         try { return await (this.actor as any).adminGetAllMembers(); }
+        catch (e) { if (this.processError) this.processError(e); throw e; }
+    }
+    async adminConfirmPayment(member: Principal): Promise<boolean> {
+        try { return await (this.actor as any).adminConfirmPayment(member); }
+        catch (e) { if (this.processError) this.processError(e); throw e; }
+    }
+    async adminMarkHairSamplesReceived(member: Principal): Promise<boolean> {
+        try { return await (this.actor as any).adminMarkHairSamplesReceived(member); }
         catch (e) { if (this.processError) this.processError(e); throw e; }
     }
     async adminApproveMember(member: Principal): Promise<boolean> {
@@ -196,6 +230,56 @@ export class Backend implements backendInterface {
     }
     async adminRemoveService(id: bigint): Promise<boolean> {
         try { return await (this.actor as any).adminRemoveService(id); }
+        catch (e) { if (this.processError) this.processError(e); throw e; }
+    }
+    async getAllProducts(): Promise<Product[]> {
+        try { return await (this.actor as any).getAllProducts(); }
+        catch (e) { if (this.processError) this.processError(e); throw e; }
+    }
+    async getProductById(id: bigint): Promise<[] | [Product]> {
+        try { return await (this.actor as any).getProductById(id); }
+        catch (e) { if (this.processError) this.processError(e); throw e; }
+    }
+    async adminAddProduct(name: string, description: string, price: bigint, category: ProductCategory, imageUrl: string, inStock: boolean, featured: boolean): Promise<[] | [bigint]> {
+        try { return await (this.actor as any).adminAddProduct(name, description, price, category, imageUrl, inStock, featured); }
+        catch (e) { if (this.processError) this.processError(e); throw e; }
+    }
+    async adminUpdateProduct(id: bigint, name: string, description: string, price: bigint, category: ProductCategory, imageUrl: string, inStock: boolean, featured: boolean): Promise<boolean> {
+        try { return await (this.actor as any).adminUpdateProduct(id, name, description, price, category, imageUrl, inStock, featured); }
+        catch (e) { if (this.processError) this.processError(e); throw e; }
+    }
+    async adminRemoveProduct(id: bigint): Promise<boolean> {
+        try { return await (this.actor as any).adminRemoveProduct(id); }
+        catch (e) { if (this.processError) this.processError(e); throw e; }
+    }
+    async adminToggleProductStock(id: bigint): Promise<boolean> {
+        try { return await (this.actor as any).adminToggleProductStock(id); }
+        catch (e) { if (this.processError) this.processError(e); throw e; }
+    }
+    async adminToggleProductFeatured(id: bigint): Promise<boolean> {
+        try { return await (this.actor as any).adminToggleProductFeatured(id); }
+        catch (e) { if (this.processError) this.processError(e); throw e; }
+    }
+    async uploadProductImage(file: File): Promise<string> {
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const bytes = new Uint8Array(arrayBuffer);
+            const blob = ExternalBlob.fromBytes(bytes);
+            const hashBytes = await this._uploadFile(blob);
+            const externalBlob = await this._downloadFile(hashBytes);
+            return externalBlob.getDirectURL();
+        } catch (e) { if (this.processError) this.processError(e); throw e; }
+    }
+    async placeOrder(orderId: string, customerName: string, customerPhone: string, customerAddress: string, customerPincode: string, items: OrderItem[], totalAmount: bigint): Promise<[] | [bigint]> {
+        try { return await (this.actor as any).placeOrder(orderId, customerName, customerPhone, customerAddress, customerPincode, items, totalAmount); }
+        catch (e) { if (this.processError) this.processError(e); throw e; }
+    }
+    async getMyOrders(): Promise<Order[]> {
+        try { return await (this.actor as any).getMyOrders(); }
+        catch (e) { if (this.processError) this.processError(e); throw e; }
+    }
+    async adminGetAllOrders(): Promise<Order[]> {
+        try { return await (this.actor as any).adminGetAllOrders(); }
         catch (e) { if (this.processError) this.processError(e); throw e; }
     }
 }

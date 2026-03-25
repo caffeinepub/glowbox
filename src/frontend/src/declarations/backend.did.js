@@ -20,6 +20,7 @@ const MemberProfile = IDL.Record({
   address: IDL.Text,
   status: MemberStatus,
   paymentConfirmed: IDL.Bool,
+  paymentRefId: IDL.Text,
   registeredAt: IDL.Nat64,
 });
 
@@ -46,6 +47,27 @@ const SalonService = IDL.Record({
   category: ServiceCategory,
 });
 
+const ProductCategory = IDL.Variant({
+  hair_care: IDL.Null,
+  shampoo: IDL.Null,
+  conditioner: IDL.Null,
+  skin_care: IDL.Null,
+  makeup: IDL.Null,
+  accessories: IDL.Null,
+  other: IDL.Null,
+});
+
+const Product = IDL.Record({
+  id: IDL.Nat,
+  name: IDL.Text,
+  description: IDL.Text,
+  price: IDL.Nat,
+  category: ProductCategory,
+  imageUrl: IDL.Text,
+  inStock: IDL.Bool,
+  featured: IDL.Bool,
+});
+
 const UserRole = IDL.Variant({
   admin: IDL.Null,
   user: IDL.Null,
@@ -58,12 +80,16 @@ export const idlService = IDL.Service({
   assignCallerUserRole: IDL.Func([IDL.Principal, UserRole], [], []),
   isCallerAdmin: IDL.Func([], [IDL.Bool], ['query']),
   createAccount: IDL.Func([IDL.Text], [IDL.Bool], []),
+  refreshAccountRole: IDL.Func([IDL.Text], [IDL.Bool], []),
   emailExists: IDL.Func([IDL.Text], [IDL.Bool], ['query']),
+  getPrincipalForEmail: IDL.Func([IDL.Text], [IDL.Opt(IDL.Principal)], ['query']),
   registerMember: IDL.Func([IDL.Text, IDL.Text, IDL.Text], [IDL.Bool], []),
-  confirmPayment: IDL.Func([], [IDL.Bool], []),
+  confirmPayment: IDL.Func([IDL.Text], [IDL.Bool], []),
   getMyProfile: IDL.Func([], [IDL.Opt(MemberProfile)], ['query']),
   getApprovedServices: IDL.Func([], [IDL.Vec(SalonService)], ['query']),
   getAllSalons: IDL.Func([], [IDL.Vec(Salon)], ['query']),
+  getAllProducts: IDL.Func([], [IDL.Vec(Product)], ['query']),
+  getProductById: IDL.Func([IDL.Nat], [IDL.Opt(Product)], ['query']),
   adminGetAllMembers: IDL.Func([], [IDL.Vec(MemberProfile)], ['query']),
   adminConfirmPayment: IDL.Func([IDL.Principal], [IDL.Bool], []),
   adminMarkHairSamplesReceived: IDL.Func([IDL.Principal], [IDL.Bool], []),
@@ -73,6 +99,11 @@ export const idlService = IDL.Service({
   adminAddService: IDL.Func([IDL.Nat, IDL.Text, IDL.Text, ServiceCategory], [IDL.Opt(IDL.Nat)], []),
   adminRemoveSalon: IDL.Func([IDL.Nat], [IDL.Bool], []),
   adminRemoveService: IDL.Func([IDL.Nat], [IDL.Bool], []),
+  adminAddProduct: IDL.Func([IDL.Text, IDL.Text, IDL.Nat, ProductCategory, IDL.Text, IDL.Bool, IDL.Bool], [IDL.Opt(IDL.Nat)], []),
+  adminUpdateProduct: IDL.Func([IDL.Nat, IDL.Text, IDL.Text, IDL.Nat, ProductCategory, IDL.Text, IDL.Bool, IDL.Bool], [IDL.Bool], []),
+  adminRemoveProduct: IDL.Func([IDL.Nat], [IDL.Bool], []),
+  adminToggleProductStock: IDL.Func([IDL.Nat], [IDL.Bool], []),
+  adminToggleProductFeatured: IDL.Func([IDL.Nat], [IDL.Bool], []),
 });
 
 export const idlInitArgs = [];
@@ -93,6 +124,7 @@ export const idlFactory = ({ IDL }) => {
     address: IDL.Text,
     status: MemberStatus,
     paymentConfirmed: IDL.Bool,
+    paymentRefId: IDL.Text,
     registeredAt: IDL.Nat64,
   });
   const Salon = IDL.Record({
@@ -115,6 +147,25 @@ export const idlFactory = ({ IDL }) => {
     description: IDL.Text,
     category: ServiceCategory,
   });
+  const ProductCategory = IDL.Variant({
+    hair_care: IDL.Null,
+    shampoo: IDL.Null,
+    conditioner: IDL.Null,
+    skin_care: IDL.Null,
+    makeup: IDL.Null,
+    accessories: IDL.Null,
+    other: IDL.Null,
+  });
+  const Product = IDL.Record({
+    id: IDL.Nat,
+    name: IDL.Text,
+    description: IDL.Text,
+    price: IDL.Nat,
+    category: ProductCategory,
+    imageUrl: IDL.Text,
+    inStock: IDL.Bool,
+    featured: IDL.Bool,
+  });
   const UserRole = IDL.Variant({
     admin: IDL.Null,
     user: IDL.Null,
@@ -126,12 +177,16 @@ export const idlFactory = ({ IDL }) => {
     assignCallerUserRole: IDL.Func([IDL.Principal, UserRole], [], []),
     isCallerAdmin: IDL.Func([], [IDL.Bool], ['query']),
     createAccount: IDL.Func([IDL.Text], [IDL.Bool], []),
+    refreshAccountRole: IDL.Func([IDL.Text], [IDL.Bool], []),
     emailExists: IDL.Func([IDL.Text], [IDL.Bool], ['query']),
+    getPrincipalForEmail: IDL.Func([IDL.Text], [IDL.Opt(IDL.Principal)], ['query']),
     registerMember: IDL.Func([IDL.Text, IDL.Text, IDL.Text], [IDL.Bool], []),
-    confirmPayment: IDL.Func([], [IDL.Bool], []),
+    confirmPayment: IDL.Func([IDL.Text], [IDL.Bool], []),
     getMyProfile: IDL.Func([], [IDL.Opt(MemberProfile)], ['query']),
     getApprovedServices: IDL.Func([], [IDL.Vec(SalonService)], ['query']),
     getAllSalons: IDL.Func([], [IDL.Vec(Salon)], ['query']),
+    getAllProducts: IDL.Func([], [IDL.Vec(Product)], ['query']),
+    getProductById: IDL.Func([IDL.Nat], [IDL.Opt(Product)], ['query']),
     adminGetAllMembers: IDL.Func([], [IDL.Vec(MemberProfile)], ['query']),
     adminConfirmPayment: IDL.Func([IDL.Principal], [IDL.Bool], []),
     adminMarkHairSamplesReceived: IDL.Func([IDL.Principal], [IDL.Bool], []),
@@ -141,6 +196,11 @@ export const idlFactory = ({ IDL }) => {
     adminAddService: IDL.Func([IDL.Nat, IDL.Text, IDL.Text, ServiceCategory], [IDL.Opt(IDL.Nat)], []),
     adminRemoveSalon: IDL.Func([IDL.Nat], [IDL.Bool], []),
     adminRemoveService: IDL.Func([IDL.Nat], [IDL.Bool], []),
+    adminAddProduct: IDL.Func([IDL.Text, IDL.Text, IDL.Nat, ProductCategory, IDL.Text, IDL.Bool, IDL.Bool], [IDL.Opt(IDL.Nat)], []),
+    adminUpdateProduct: IDL.Func([IDL.Nat, IDL.Text, IDL.Text, IDL.Nat, ProductCategory, IDL.Text, IDL.Bool, IDL.Bool], [IDL.Bool], []),
+    adminRemoveProduct: IDL.Func([IDL.Nat], [IDL.Bool], []),
+    adminToggleProductStock: IDL.Func([IDL.Nat], [IDL.Bool], []),
+    adminToggleProductFeatured: IDL.Func([IDL.Nat], [IDL.Bool], []),
   });
 };
 

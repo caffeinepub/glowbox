@@ -165,7 +165,7 @@ export default function OnboardPage() {
       return;
     }
     try {
-      const ok = await confirmPayment.mutateAsync();
+      const ok = await confirmPayment.mutateAsync(refId);
       if (ok) {
         toast.success(
           "Payment submitted! Our team will verify it within 1-2 business days.",

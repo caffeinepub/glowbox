@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   backendInterface as BackendAPI,
   MemberProfile,
+  Product,
+  ProductCategory,
   Salon,
   SalonService,
   ServiceCategory,
@@ -102,9 +104,9 @@ export function useConfirmPayment() {
   const { actor } = useActor();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async () => {
+    mutationFn: async (refId: string) => {
       if (!actor) throw new Error("Actor not available");
-      return getApi(actor).confirmPayment();
+      return getApi(actor).confirmPayment(refId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["myProfile"] });
@@ -240,5 +242,165 @@ export function useAdminRemoveService() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["approvedServices"] });
     },
+  });
+}
+
+// ---- Product hooks ----
+
+export function useGetAllProducts() {
+  const { actor, isFetching } = useActor();
+  return useQuery<Product[]>({
+    queryKey: ["allProducts"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return getApi(actor).getAllProducts();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useGetProductById(id: bigint) {
+  const { actor, isFetching } = useActor();
+  return useQuery<Product | null>({
+    queryKey: ["product", id.toString()],
+    queryFn: async () => {
+      if (!actor) return null;
+      const result = await getApi(actor).getProductById(id);
+      return result.length > 0 ? (result[0] as Product) : null;
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useAdminAddProduct() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      name,
+      description,
+      price,
+      category,
+      imageUrl,
+      inStock,
+      featured,
+    }: {
+      name: string;
+      description: string;
+      price: bigint;
+      category: ProductCategory;
+      imageUrl: string;
+      inStock: boolean;
+      featured: boolean;
+    }) => {
+      if (!actor) throw new Error("Actor not available");
+      return getApi(actor).adminAddProduct(
+        name,
+        description,
+        price,
+        category,
+        imageUrl,
+        inStock,
+        featured,
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["allProducts"] });
+    },
+  });
+}
+
+export function useAdminUpdateProduct() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      name,
+      description,
+      price,
+      category,
+      imageUrl,
+      inStock,
+      featured,
+    }: {
+      id: bigint;
+      name: string;
+      description: string;
+      price: bigint;
+      category: ProductCategory;
+      imageUrl: string;
+      inStock: boolean;
+      featured: boolean;
+    }) => {
+      if (!actor) throw new Error("Actor not available");
+      return getApi(actor).adminUpdateProduct(
+        id,
+        name,
+        description,
+        price,
+        category,
+        imageUrl,
+        inStock,
+        featured,
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["allProducts"] });
+    },
+  });
+}
+
+export function useAdminRemoveProduct() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: bigint) => {
+      if (!actor) throw new Error("Actor not available");
+      return getApi(actor).adminRemoveProduct(id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["allProducts"] });
+    },
+  });
+}
+
+export function useAdminToggleProductStock() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: bigint) => {
+      if (!actor) throw new Error("Actor not available");
+      return getApi(actor).adminToggleProductStock(id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["allProducts"] });
+    },
+  });
+}
+
+export function useAdminToggleProductFeatured() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: bigint) => {
+      if (!actor) throw new Error("Actor not available");
+      return getApi(actor).adminToggleProductFeatured(id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["allProducts"] });
+    },
+  });
+}
+
+export function useAdminGetAllOrders() {
+  const { actor, isFetching } = useActor();
+  return useQuery({
+    queryKey: ["adminAllOrders"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return getApi(actor).adminGetAllOrders();
+    },
+    enabled: !!actor && !isFetching,
   });
 }
